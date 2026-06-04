@@ -113,3 +113,8 @@ $env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-17.0.19.10-hotspot"
 
 chạy frontend:
 npm run dev
+
+
+git add .
+git commit -m "Update code"
+git push
