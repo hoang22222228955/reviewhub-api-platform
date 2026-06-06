@@ -867,7 +867,7 @@ def main():
                 print(f"\nĐã đạt giới hạn {MAX_REVIEWS} reviews")
                 break
 
-            print(f"Scroll {i + 1}: {len(all_reviews)} reviews")
+            print(f"Đang scroll lần {i + 1}: đã lấy được {len(all_reviews)} bình luận", flush=True)
 
             scroll_review_panel(driver)
 

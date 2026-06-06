@@ -242,3 +242,19 @@
 .infoBox li {
   margin-bottom: 0.25rem;
 }
+.logProgress {
+  color: #93c5fd;
+}
+
+.logBody::-webkit-scrollbar {
+  width: 8px;
+}
+
+.logBody::-webkit-scrollbar-thumb {
+  background: #374151;
+  border-radius: 999px;
+}
+
+.logBody::-webkit-scrollbar-track {
+  background: #111827;
+}

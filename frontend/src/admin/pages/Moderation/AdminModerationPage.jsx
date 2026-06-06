@@ -517,6 +517,27 @@ Bạn có chắc muốn áp dụng đề xuất của AI không?`
     safePage * PAGE_SIZE
   );
 
+  const paginationItems = useMemo(() => {
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, index) => index + 1);
+    }
+
+    const items = [1];
+    const start = Math.max(2, safePage - 1);
+    const end = Math.min(totalPages - 1, safePage + 1);
+
+    if (start > 2) items.push('left-dots');
+
+    for (let pageNumber = start; pageNumber <= end; pageNumber += 1) {
+      items.push(pageNumber);
+    }
+
+    if (end < totalPages - 1) items.push('right-dots');
+
+    items.push(totalPages);
+    return items;
+  }, [safePage, totalPages]);
+
   const aiDecisionMap = useMemo(() => {
     const map = new Map();
 
@@ -732,8 +753,12 @@ Bạn có chắc muốn áp dụng đề xuất của AI không?`
             onClick={() => setSelectedCarrierKey('all')}
             disabled={!!actionLoading || aiLoading}
           >
-            <strong>Tất cả nhà xe</strong>
-            <span>{filteredQueue.length} review</span>
+            <div>
+              <strong>Tất cả nhà xe</strong>
+              <span>ALL</span>
+            </div>
+
+            <em>{filteredQueue.length}</em>
           </button>
 
           {carrierGroups.map(group => (
@@ -952,14 +977,18 @@ Bạn có chắc muốn áp dụng đề xuất của AI không?`
           </div>
 
           <div className={styles.pagination}>
-            {Array.from({ length: totalPages }).map((_, index) => (
-              <button
-                key={index}
-                className={safePage === index + 1 ? styles.activePage : ''}
-                onClick={() => setPage(index + 1)}
-              >
-                {index + 1}
-              </button>
+            {paginationItems.map((item, index) => (
+              typeof item === 'string' ? (
+                <span key={`${item}-${index}`} className={styles.paginationDots}>...</span>
+              ) : (
+                <button
+                  key={item}
+                  className={safePage === item ? styles.activePage : ''}
+                  onClick={() => setPage(item)}
+                >
+                  {item}
+                </button>
+              )
             ))}
           </div>
         </>

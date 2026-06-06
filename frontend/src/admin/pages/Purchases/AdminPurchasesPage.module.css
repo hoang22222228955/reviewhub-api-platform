@@ -618,3 +618,133 @@
     animation: none;
   }
 }
+
+
+/* ===== FIX TABLE PARTNER TEXT OVERLAP ===== */
+/* Chia lại chiều rộng cột để cột Partner không đè sang cột Đơn vị */
+.purchaseTable {
+  table-layout: fixed;
+}
+
+/* Thời gian */
+.purchaseTable th:nth-child(1),
+.purchaseTable td:nth-child(1) {
+  width: 150px;
+}
+
+/* Partner: tăng rộng hơn để đủ avatar + tên + mã */
+.purchaseTable th:nth-child(2),
+.purchaseTable td:nth-child(2) {
+  width: 260px;
+}
+
+/* Đơn vị */
+.purchaseTable th:nth-child(3),
+.purchaseTable td:nth-child(3) {
+  width: 240px;
+}
+
+/* Gói đã mua */
+.purchaseTable th:nth-child(4),
+.purchaseTable td:nth-child(4) {
+  width: 160px;
+}
+
+/* Số tiền */
+.purchaseTable th:nth-child(5),
+.purchaseTable td:nth-child(5) {
+  width: 150px;
+}
+
+/* Trạng thái */
+.purchaseTable th:nth-child(6),
+.purchaseTable td:nth-child(6) {
+  width: 170px;
+}
+
+/* Hành động */
+.purchaseTable th:nth-child(7),
+.purchaseTable td:nth-child(7) {
+  width: 150px;
+}
+
+/* Giữ nội dung trong đúng phạm vi ô */
+.purchaseTable th,
+.purchaseTable td {
+  overflow: hidden;
+}
+
+.partnerCell {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.partnerCell > div {
+  min-width: 0;
+  max-width: calc(100% - 46px);
+  overflow: hidden;
+}
+
+.partnerCell strong {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.partnerCell small {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Cột đơn vị cho phép xuống dòng đẹp, không bị chồng chữ */
+.orgCell {
+  overflow: hidden;
+  color: #334155 !important;
+  font-weight: 400 !important;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+/* Khi màn hình hẹp, cho table có scroll ngang thay vì ép cột gây đè */
+.tableShell {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.purchaseTable {
+  min-width: 1280px;
+}
+
+/* Làm thanh scroll nhẹ hơn */
+.tableShell::-webkit-scrollbar {
+  height: 8px;
+}
+
+.tableShell::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 999px;
+}
+
+.tableShell::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 999px;
+}
+
+.tableShell::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+@media (max-width: 1200px) {
+  .purchaseTable {
+    min-width: 1280px;
+  }
+}

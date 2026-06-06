@@ -10,50 +10,89 @@
   gap: 12px;
 }
 
-/* ── FAB button ── */
+/* ── FAB button - giống FloatingAIChat bên ngoài ── */
 .fab {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
+  width: 66px;
+  height: 66px;
   border: none;
-  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  border-radius: 24px;
+  background: linear-gradient(135deg, #4f46e5, #2563eb);
   color: #fff;
-  font-size: 24px;
   cursor: pointer;
-  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  box-shadow: 0 20px 45px rgba(37, 99, 235, 0.35);
+  display: grid;
+  place-items: center;
   position: relative;
-  transition: transform 0.2s, box-shadow 0.2s;
+  overflow: visible;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .fab:hover {
-  transform: scale(1.08);
-  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.5);
+  transform: translateY(-2px) scale(1.04);
+  box-shadow: 0 24px 52px rgba(37, 99, 235, 0.45);
 }
 
 .fabOpen {
   background: linear-gradient(135deg, #ef4444, #dc2626);
+  border-radius: 22px;
+  box-shadow: 0 18px 42px rgba(239, 68, 68, 0.35);
+}
+
+.botIcon {
+  position: relative;
+  z-index: 2;
+  font-weight: 900;
   font-size: 18px;
+  letter-spacing: 0.02em;
+}
+
+.closeIcon {
+  position: relative;
+  z-index: 2;
+  font-size: 30px;
+  line-height: 1;
+  font-weight: 500;
+}
+
+.pulse {
+  position: absolute;
+  inset: -6px;
+  border-radius: 28px;
+  background: rgba(79, 70, 229, 0.25);
+  animation: pulse 1.6s infinite;
+  pointer-events: none;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.7;
+  }
+
+  100% {
+    transform: scale(1.25);
+    opacity: 0;
+  }
 }
 
 .fabBadge {
   position: absolute;
-  top: -4px;
-  right: -4px;
+  top: -6px;
+  right: -6px;
+  z-index: 3;
   background: #ef4444;
   color: #fff;
   border-radius: 999px;
   font-size: 11px;
-  font-weight: 700;
-  min-width: 20px;
-  height: 20px;
+  font-weight: 800;
+  min-width: 22px;
+  height: 22px;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0 4px;
+  padding: 0 5px;
   border: 2px solid #fff;
+  box-shadow: 0 8px 18px rgba(239, 68, 68, 0.35);
 }
 
 /* ── Chat panel ── */
@@ -442,83 +481,13 @@
   background: #fff;
   color: #111827;
   border: 1px solid #e5e7eb;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.04);
-  max-width: 100%;
-  overflow: hidden;
-}
-
-.aiMessage h1,
-.aiMessage h2,
-.aiMessage h3 {
-  margin: 4px 0 8px;
-  line-height: 1.2;
-}
-
-.aiMessage h1 {
-  font-size: 20px;
-}
-
-.aiMessage h2 {
-  font-size: 15px;
-}
-
-.aiMessage h3 {
-  font-size: 14px;
-}
-
-.aiMessage p {
-  margin: 4px 0;
-}
-
-.aiMessage ul {
-  margin: 4px 0;
-  padding-left: 18px;
-}
-
-.aiMessage li {
-  margin: 2px 0;
-}
-
-.aiMessage code {
-  background: #eef2ff;
-  color: #4338ca;
-  padding: 2px 6px;
-  border-radius: 6px;
-  font-size: 12px;
-}
-
-/* ============================= */
-/* AI message + markdown */
-/* ============================= */
-
-.aiMessage .avatar {
-  background: linear-gradient(135deg, #7c3aed, #2563eb);
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
-  font-size: 14px;
-}
-
-.aiMessage .bubbleWrap {
-  max-width: calc(100% - 40px);
-  min-width: 0;
-}
-
-.aiMessage .bubbleTheirs {
-  background: #fff;
-  color: #111827;
-
-  border: 1px solid #e5e7eb;
-
   box-shadow:
     0 2px 10px rgba(0,0,0,0.04),
     0 8px 24px rgba(0,0,0,0.04);
-
   max-width: 100%;
-
   overflow-x: auto;
   overflow-y: hidden;
-
   border-radius: 18px;
-
   padding: 12px 14px;
 }
 
@@ -564,11 +533,8 @@
 .aiMessage code {
   background: #eef2ff;
   color: #4338ca;
-
   padding: 2px 6px;
-
   border-radius: 6px;
-
   font-size: 12px;
 }
 
@@ -579,23 +545,15 @@
 .aiMessage table {
   width: 100%;
   max-width: 100%;
-
   border-collapse: separate;
   border-spacing: 0;
-
   margin-top: 10px;
-
   font-size: 12px;
   line-height: 1.45;
-
   border-radius: 14px;
-
   overflow: hidden;
-
   background: #fff;
-
   table-layout: auto;
-
   box-shadow:
     0 1px 3px rgba(0,0,0,0.04),
     0 6px 18px rgba(0,0,0,0.05);
@@ -607,28 +565,19 @@
 
 .aiMessage th {
   padding: 10px 12px;
-
   color: #312e81;
-
   font-weight: 800;
   font-size: 11px;
-
   border-bottom: 1px solid #dbeafe;
-
   text-align: left;
-
   white-space: nowrap;
 }
 
 .aiMessage td {
   padding: 10px 12px;
-
   border-bottom: 1px solid #eef2ff;
-
   color: #111827;
-
   vertical-align: top;
-
   white-space: nowrap;
 }
 
@@ -693,5 +642,15 @@
 
   .aiMessage .bubbleWrap {
     max-width: calc(100% - 38px);
+  }
+
+  .fab {
+    width: 62px;
+    height: 62px;
+    border-radius: 22px;
+  }
+
+  .pulse {
+    border-radius: 26px;
   }
 }

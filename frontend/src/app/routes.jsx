@@ -33,36 +33,67 @@ import AdminPartnersPage from '../admin/pages/Partners/AdminPartnersPage';
 import AdminModerationPage from '../admin/pages/Moderation/AdminModerationPage';
 import AdminPurchasesPage from '../admin/pages/Purchases/AdminPurchasesPage';
 import AdminBankPage from '../admin/pages/Bank/AdminBankPage';
+import AdminSyncReviewPage from '../admin/pages/SyncReview/AdminSyncReviewPage';
 
 function RequireAuth() {
   const { currentUser, loading } = useAuth();
-  if (!loading && !currentUser) return <Navigate to="/dang-nhap" replace />;
-  if (!currentUser) return null;
+
+  if (!loading && !currentUser) {
+    return <Navigate to="/dang-nhap" replace />;
+  }
+
+  if (!currentUser) {
+    return null;
+  }
+
   return <Outlet />;
 }
 
 function RequirePartner() {
   const { currentUser, loading } = useAuth();
+
   const ok = currentUser?.role === 'partner' || currentUser?.role === 'admin';
-  if (!loading && !ok) return <Navigate to="/tai-khoan" replace />;
-  if (!currentUser) return null;
+
+  if (!loading && !ok) {
+    return <Navigate to="/tai-khoan" replace />;
+  }
+
+  if (!currentUser) {
+    return null;
+  }
+
   return <Outlet />;
 }
 
 function RequireAdmin() {
   const { currentUser, loading } = useAuth();
-  if (!loading && currentUser?.role !== 'admin') return <Navigate to="/" replace />;
-  if (!currentUser) return null;
+
+  if (!loading && currentUser?.role !== 'admin') {
+    return <Navigate to="/" replace />;
+  }
+
+  if (!currentUser) {
+    return null;
+  }
+
   return <Outlet />;
 }
 
 function RequirePrivilege({ privilegeKey }) {
   const { hasPrivilege, currentUser, loading } = useAuth();
-  if (!loading && !currentUser) return <Navigate to="/dang-nhap" replace />;
-  if (!currentUser) return null;
+
+  if (!loading && !currentUser) {
+    return <Navigate to="/dang-nhap" replace />;
+  }
+
+  if (!currentUser) {
+    return null;
+  }
+
   if (!loading && !hasPrivilege(privilegeKey)) {
     return <Navigate to="/doi-tac" replace state={{ blocked: privilegeKey }} />;
   }
+
   return <Outlet />;
 }
 
@@ -72,7 +103,12 @@ export default function AppRoutes() {
       <Route element={<PublicLayout />}>
         <Route index element={<HomePage />} />
         <Route path="dich-vu/:slug" element={<ServiceCategoryPage />} />
-        <Route path="dich-vu/:slug/reviews/:operatorCode" element={<ServiceOperatorReviewsPage />} />
+
+        <Route
+          path="dich-vu/:slug/reviews/:operatorCode"
+          element={<ServiceOperatorReviewsPage />}
+        />
+
         <Route path="bang-gia" element={<PricingPage />} />
         <Route path="tai-lieu-api" element={<ApiDocsPage />} />
         <Route path="luong-he-thong" element={<SystemFlowPage />} />
@@ -91,16 +127,21 @@ export default function AppRoutes() {
         <Route path="doi-tac" element={<PartnerLayout />}>
           <Route index element={<PartnerDashboardPage />} />
           <Route path="khoa-api" element={<PartnerApiKeysPage />} />
+
           <Route element={<RequirePrivilege privilegeKey={P.WRITE_REVIEW} />}>
             <Route path="gui-review" element={<PartnerReviewSubmitPage />} />
           </Route>
+
           <Route path="lay-review" element={<PartnerReviewQueryPage />} />
+
           <Route element={<RequirePrivilege privilegeKey={P.SLA} />}>
             <Route path="theo-doi-sla" element={<PartnerSLAPage />} />
           </Route>
+
           <Route element={<RequirePrivilege privilegeKey={P.DOMAIN_EXPAND} />}>
             <Route path="domain" element={<PartnerDomainPage />} />
           </Route>
+
           <Route path="dac-quyen" element={<PartnerPrivilegesPage />} />
           <Route path="lich-su-mua" element={<PartnerPurchasesPage />} />
         </Route>
@@ -113,6 +154,10 @@ export default function AppRoutes() {
           <Route path="doi-tac" element={<AdminPartnersPage />} />
           <Route path="mua-goi" element={<AdminPurchasesPage />} />
           <Route path="kiem-duyet" element={<AdminModerationPage />} />
+
+          {/* Trang crawl Google Maps */}
+          <Route path="lay-review-google-maps" element={<AdminSyncReviewPage />} />
+
           <Route path="ngan-hang" element={<AdminBankPage />} />
         </Route>
       </Route>

@@ -177,6 +177,44 @@
   font-weight: 400;
 }
 
+.imagePreview {
+  display: grid;
+  gap: 10px;
+  padding: 15px;
+  border-radius: 14px;
+  background: #f8fafc;
+  border: 1px solid #edf1f6;
+}
+
+.imagePreview > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.imagePreview span {
+  color: #111827;
+  font-size: 12px;
+  font-weight: 520;
+}
+
+.imagePreview small {
+  color: #64748b;
+  font-size: 11.2px;
+  font-weight: 400;
+}
+
+.imagePreview img {
+  width: 100%;
+  height: 190px;
+  display: block;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+}
+
 .empty {
   display: grid;
   gap: 8px;

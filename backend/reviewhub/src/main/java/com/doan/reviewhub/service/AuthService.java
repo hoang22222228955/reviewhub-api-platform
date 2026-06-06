@@ -1,6 +1,9 @@
 package com.doan.reviewhub.service;
 
-import com.doan.reviewhub.dto.*;
+import com.doan.reviewhub.dto.AuthResponse;
+import com.doan.reviewhub.dto.LoginRequest;
+import com.doan.reviewhub.dto.RegisterRequest;
+import com.doan.reviewhub.dto.UserDto;
 import com.doan.reviewhub.entity.User;
 import com.doan.reviewhub.repository.UserRepository;
 import com.doan.reviewhub.security.JwtUtil;
@@ -17,22 +20,10 @@ public class AuthService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
-    private final OtpService otpService;
 
     public AuthResponse register(RegisterRequest req) {
         if (userRepository.existsByEmail(req.getEmail().trim().toLowerCase())) {
             return new AuthResponse(false, "Email này đã tồn tại.", null, null);
-        }
-
-        // Xác minh OTP nếu có số điện thoại
-        if (req.getPhone() != null && !req.getPhone().isBlank()) {
-            if (req.getOtp() == null || req.getOtp().isBlank()) {
-                return new AuthResponse(false, "Vui lòng xác minh số điện thoại bằng mã OTP.", null, null);
-            }
-            boolean otpOk = otpService.verify(req.getPhone(), req.getOtp());
-            if (!otpOk) {
-                return new AuthResponse(false, "Mã OTP không đúng hoặc đã hết hạn.", null, null);
-            }
         }
 
         String id = "user-" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
@@ -54,6 +45,7 @@ public class AuthService {
                 .build();
 
         userRepository.save(user);
+
         String token = jwtUtil.generateToken(user.getEmail(), user.getRole());
         return new AuthResponse(true, "Đăng ký thành công.", token, UserDto.from(user));
     }
@@ -76,6 +68,7 @@ public class AuthService {
     public boolean forgotPassword(String phone, String newPassword) {
         User user = userRepository.findByPhone(phone.trim()).orElse(null);
         if (user == null) return false;
+
         user.setPassword(passwordEncoder.encode(newPassword));
         userRepository.save(user);
         return true;

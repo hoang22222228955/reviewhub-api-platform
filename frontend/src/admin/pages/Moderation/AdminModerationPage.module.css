@@ -1489,3 +1489,76 @@ textarea {
   font-weight: 600;
   color: #be123c;
 }
+
+
+/* ===== FIX: carrier all + many pagination pages ===== */
+.carrierPanel {
+  overflow: hidden;
+}
+
+.carrierList {
+  align-items: stretch;
+}
+
+.carrierChip {
+  min-width: 0;
+  width: 100%;
+  overflow: hidden;
+}
+
+.carrierChip > div {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.carrierChip strong,
+.carrierChip span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.carrierChip:focus {
+  outline: none;
+}
+
+.carrierChip:focus-visible {
+  outline: 2px solid #818cf8;
+  outline-offset: 2px;
+}
+
+.pagination {
+  max-width: 100%;
+  flex-wrap: wrap;
+  overflow: hidden;
+  align-items: center;
+}
+
+.pagination button {
+  flex: 0 0 auto;
+}
+
+.paginationDots {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* ===== PATCH: move pagination to left near sidebar ===== */
+.pagination {
+  justify-content: flex-start !important;
+  margin-top: 14px;
+  padding-left: 0;
+}
+
+.pagination button,
+.paginationDots {
+  flex: 0 0 auto;
+}

@@ -26,6 +26,7 @@ export default function ReviewPreview({ review }) {
   }
 
   const percent = Math.max(0, Math.min(100, (Number(review.rating || 0) / 5) * 100))
+  const previewImage = review.imageUrl || review.reviewImage || review.localImagePreviewUrl || review.imagePreviewUrl || ''
 
   return (
     <aside className={styles.panel}>
@@ -56,6 +57,10 @@ export default function ReviewPreview({ review }) {
 
       <dl className={styles.metaList}>
         <div>
+          <dt>Mã đối tượng</dt>
+          <dd>{review.targetCode || review.operatorCode || '—'}</dd>
+        </div>
+        <div>
           <dt>Danh mục</dt>
           <dd>{review.category || '—'}</dd>
         </div>
@@ -73,6 +78,17 @@ export default function ReviewPreview({ review }) {
         <span>Nội dung đánh giá</span>
         <p>{review.comment || 'Chưa có nội dung đánh giá.'}</p>
       </section>
+
+      {previewImage && (
+        <section className={styles.imagePreview}>
+          <div>
+            <span>Ảnh đánh giá</span>
+            {review.imageFileName && <small>{review.imageFileName}</small>}
+          </div>
+
+          <img src={previewImage} alt="Ảnh đánh giá vừa gửi" />
+        </section>
+      )}
     </aside>
   )
 }

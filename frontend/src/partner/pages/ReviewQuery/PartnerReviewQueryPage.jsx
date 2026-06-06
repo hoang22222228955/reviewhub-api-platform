@@ -4,6 +4,7 @@ import { fetchReviews } from '../../../services/reviewService'
 import { formatDateTime } from '../../../shared/lib/format'
 import api from '../../../services/api'
 import styles from './PartnerReviewQueryPage.module.css'
+import PartnerReviewAIInsight from './PartnerReviewAIInsight'
 
 const PARTNER_NAME_MAP = {
   'PT-001': 'VeXeNhanh',
@@ -428,6 +429,313 @@ function SparkLine({ tone = 'violet' }) {
   )
 }
 
+
+function makePartnerAIReviewPayload(item) {
+  return {
+    id: item.id || '',
+    targetName: item.targetName || '',
+    targetCode: item.targetCode || '',
+    partnerName: item.partnerName || '',
+    reviewerName: item.reviewerName || '',
+    comment: item.comment || '',
+    rating: Number(item.rating || 0),
+    sourceSystem: item.sourceSystem || '',
+    visibility: item.visibility || '',
+    moderationStatus: item.moderationStatus || '',
+    createdAt: item.createdAt || '',
+  }
+}
+
+
+function padReviewImageNumber(value) {
+  const number = Number(value)
+  if (!Number.isFinite(number) || number <= 0) return ''
+  return String(Math.trunc(number))
+}
+
+function normalizeReviewCode(value) {
+  return String(value || '').trim().toUpperCase()
+}
+
+function getReviewImageCategorySlug(review) {
+  const code = normalizeReviewCode(
+    review?.targetCode ||
+    review?.target_code ||
+    review?.operatorCode ||
+    review?.operator_code ||
+    review?.partnerCode ||
+    review?.partner_code ||
+    review?.ownerPartnerCode ||
+    review?.owner_partner_code ||
+    review?.code
+  )
+
+  if (code.startsWith('PT-') || code.startsWith('BUS-')) return 'nhaxe'
+  if (code.startsWith('KS-') || code.startsWith('HOTEL-')) return 'khachsan'
+  if (code.startsWith('MB-') || code.startsWith('AIR-')) return 'maybay'
+  if (code.startsWith('TH-') || code.startsWith('TRAIN-')) return 'tauhoa'
+  if (code.startsWith('TO-') || code.startsWith('TOUR-')) return 'tour'
+  if (code.startsWith('DV-') || code.startsWith('SERVICE-')) return 'dichvukhac'
+
+  const category = normalizeText(review?.category || review?.serviceCategory || review?.service_category)
+
+  if (category.includes('khach san') || category.includes('hotel')) return 'khachsan'
+  if (category.includes('may bay') || category.includes('hang bay')) return 'maybay'
+  if (category.includes('tau hoa')) return 'tauhoa'
+  if (category.includes('tour')) return 'tour'
+  if (category.includes('dich vu')) return 'dichvukhac'
+
+  return 'nhaxe'
+}
+
+function getReviewImageOperatorCode(review) {
+  const candidates = [
+    review?.targetCode,
+    review?.target_code,
+    review?.operatorCode,
+    review?.operator_code,
+    review?.partnerCode,
+    review?.partner_code,
+    review?.ownerPartnerCode,
+    review?.owner_partner_code,
+    review?.code,
+  ]
+    .map(normalizeReviewCode)
+    .filter(Boolean)
+
+  for (const code of candidates) {
+    const direct = code.match(/^(PT|KS|MB|TH|TO|DV)-\d{3}$/)
+    if (direct) return code
+
+    const bus = code.match(/^BUS-(\d{3})-/)
+    if (bus) return `PT-${bus[1]}`
+
+    const hotel = code.match(/^HOTEL-(\d{3})-/)
+    if (hotel) return `KS-${hotel[1]}`
+
+    const air = code.match(/^AIR-(\d{3})-/)
+    if (air) return `MB-${air[1]}`
+
+    const train = code.match(/^TRAIN-(\d{3})-/)
+    if (train) return `TH-${train[1]}`
+
+    const tour = code.match(/^TOUR-(\d{3})-/)
+    if (tour) return `TO-${tour[1]}`
+
+    const service = code.match(/^SERVICE-(\d{3})-/)
+    if (service) return `DV-${service[1]}`
+  }
+
+  return ''
+}
+
+function getReviewImageIndex(review) {
+  const explicit = review?.imageIndex || review?.reviewImageIndex || review?.photoIndex || review?.image_index || review?.review_image_index
+  const explicitValue = padReviewImageNumber(explicit)
+  if (explicitValue) return explicitValue
+
+  const idCandidates = [review?.id, review?.reviewId, review?.review_id]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean)
+
+  for (const id of idCandidates) {
+    const matched = id.match(/(?:^|[-_])(\d{1,6})$/)
+    if (matched) {
+      const value = padReviewImageNumber(matched[1])
+      if (value) return value
+    }
+  }
+
+  return ''
+}
+
+function getReviewImageInfo(review) {
+  const directImage = review?.reviewImage || review?.reviewImageUrl || review?.imageUrl || review?.photoUrl || review?.image_url || review?.photo_url
+
+  if (directImage) {
+    return {
+      url: directImage,
+      index: getReviewImageIndex(review),
+      operatorCode: getReviewImageOperatorCode(review),
+      categorySlug: getReviewImageCategorySlug(review),
+    }
+  }
+
+  const operatorCode = getReviewImageOperatorCode(review)
+  const index = getReviewImageIndex(review)
+
+  if (!operatorCode || !index) return null
+
+  const categorySlug = getReviewImageCategorySlug(review)
+
+  return {
+    url: `/anhdanggia/${categorySlug}/${operatorCode}/${index}.webp`,
+    index,
+    operatorCode,
+    categorySlug,
+  }
+}
+
+function normalizeReviewImageList(value) {
+  if (!value) return []
+
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => {
+        if (typeof item === 'string') return item
+        return item?.url || item?.src || item?.imageUrl || item?.photoUrl || item?.path || ''
+      })
+      .map((item) => String(item || '').trim())
+      .filter(Boolean)
+  }
+
+  if (typeof value === 'string') {
+    return value
+      .split(/[|,\n]/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+  }
+
+  return []
+}
+
+function getReviewImageGallery(review) {
+  const directImages = [
+    review?.images,
+    review?.imageUrls,
+    review?.photoUrls,
+    review?.reviewImages,
+    review?.reviewImageUrls,
+    review?.image_urls,
+    review?.photo_urls,
+    review?.review_images,
+  ]
+    .flatMap(normalizeReviewImageList)
+    .filter(Boolean)
+
+  if (directImages.length) {
+    const operatorCode = getReviewImageOperatorCode(review)
+    const categorySlug = getReviewImageCategorySlug(review)
+    const baseIndex = getReviewImageIndex(review)
+
+    return Array.from(new Set(directImages)).map((url, index) => ({
+      url,
+      index: index + 1,
+      displayIndex: baseIndex || index + 1,
+      operatorCode,
+      categorySlug,
+    }))
+  }
+
+  const single = getReviewImageInfo(review)
+  return single?.url ? [{ ...single, displayIndex: single.index }] : []
+}
+
+function renderPartnerAIReport(text, styles) {
+  return String(text || '')
+    .split('\n')
+    .map((line, index) => {
+      const value = line.trim()
+
+      if (!value) {
+        return <br key={`br-${index}`} />
+      }
+
+      if (value.startsWith('# ')) {
+        return <h3 key={`h3-${index}`}>{value.replace(/^#\s+/, '')}</h3>
+      }
+
+      if (value.startsWith('## ')) {
+        return <h4 key={`h4-${index}`}>{value.replace(/^##\s+/, '')}</h4>
+      }
+
+      if (value.startsWith('- ')) {
+        return (
+          <p key={`li-${index}`} className={styles.partnerAiBullet}>
+            • {value.replace(/^-\s+/, '')}
+          </p>
+        )
+      }
+
+      return <p key={`p-${index}`}>{value}</p>
+    })
+}
+
+
+function ReviewSoftIcon({ name }) {
+  const common = {
+    width: 20,
+    height: 20,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 1.7,
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round',
+    'aria-hidden': 'true',
+  }
+
+  if (name === 'info') {
+    return (
+      <svg {...common}>
+        <circle cx="12" cy="12" r="8.5" />
+        <path d="M12 10.5v5" />
+        <path d="M12 7.8h.01" />
+      </svg>
+    )
+  }
+
+  if (name === 'comment') {
+    return (
+      <svg {...common}>
+        <path d="M7.5 17.8 4.7 20V7.2A3.2 3.2 0 0 1 7.9 4h8.2a3.2 3.2 0 0 1 3.2 3.2v5.9a3.2 3.2 0 0 1-3.2 3.2H9.8l-2.3 1.5Z" />
+        <path d="M8.5 9h7" />
+        <path d="M8.5 12.3h4.5" />
+      </svg>
+    )
+  }
+
+  if (name === 'image') {
+    return (
+      <svg {...common}>
+        <rect x="4" y="5" width="16" height="14" rx="3" />
+        <path d="m7.5 15.5 3.2-3.2 2.4 2.4 1.6-1.6 2.8 2.8" />
+        <circle cx="15.5" cy="9.2" r="1.2" />
+      </svg>
+    )
+  }
+
+  if (name === 'star') {
+    return (
+      <svg {...common} fill="currentColor" stroke="none">
+        <path d="M12 4.2 14.3 9l5.2.8-3.8 3.7.9 5.2-4.6-2.4-4.6 2.4.9-5.2L4.5 9.8 9.7 9 12 4.2Z" />
+      </svg>
+    )
+  }
+
+  if (name === 'positive') {
+    return (
+      <svg {...common}>
+        <circle cx="12" cy="12" r="8.5" />
+        <path d="M8.8 12.6 11 14.8l4.4-5.1" />
+      </svg>
+    )
+  }
+
+  if (name === 'code') {
+    return (
+      <svg {...common}>
+        <path d="m9 8-4 4 4 4" />
+        <path d="m15 8 4 4-4 4" />
+        <path d="m13.5 5-3 14" />
+      </svg>
+    )
+  }
+
+  return null
+}
+
+
 export default function PartnerReviewQueryPage() {
   const { currentUser } = useAuth()
   const [filters, setFilters] = useState({
@@ -444,6 +752,11 @@ export default function PartnerReviewQueryPage() {
   const [openVisibilityId, setOpenVisibilityId] = useState(null)
   const [syncing, setSyncing] = useState(false)
   const [syncResult, setSyncResult] = useState(null)
+  const [aiReport, setAiReport] = useState('')
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiError, setAiError] = useState('')
+  const [hiddenReviewImages, setHiddenReviewImages] = useState({})
+  const [activeReviewImageIndex, setActiveReviewImageIndex] = useState(0)
 
   useEffect(() => {
     setLoading(true)
@@ -521,6 +834,11 @@ export default function PartnerReviewQueryPage() {
     })
   }, [allowedReviews, filters])
 
+  useEffect(() => {
+    setAiReport('')
+    setAiError('')
+  }, [filters.keyword, filters.category, filters.visibility, filters.sourceSystem])
+
   const stats = useMemo(() => {
     const publicShared = allowedReviews.filter((item) => item.visibility === 'public').length
     const privateMine = allowedReviews.filter((item) => item.visibility === 'private').length
@@ -576,6 +894,28 @@ export default function PartnerReviewQueryPage() {
   }, [filtered, safeCurrentPage])
 
   const selectedReview = filtered.find((item) => item.id === selectedReviewId) || null
+  const selectedReviewImages = selectedReview
+    ? getReviewImageGallery(selectedReview).filter((item) => item.url && !hiddenReviewImages[item.url])
+    : []
+  const activeReviewImage = selectedReviewImages[activeReviewImageIndex] || selectedReviewImages[0] || null
+  const activeReviewImageUrl = activeReviewImage?.url || ''
+  const shouldShowReviewImage = Boolean(activeReviewImageUrl)
+  const isSingleReviewImage = selectedReviewImages.length === 1
+  const hasMultipleReviewImages = selectedReviewImages.length > 1
+
+  useEffect(() => {
+    setActiveReviewImageIndex(0)
+  }, [selectedReviewId])
+
+  const handlePrevReviewImage = () => {
+    if (!selectedReviewImages.length) return
+    setActiveReviewImageIndex((prev) => (prev <= 0 ? selectedReviewImages.length - 1 : prev - 1))
+  }
+
+  const handleNextReviewImage = () => {
+    if (!selectedReviewImages.length) return
+    setActiveReviewImageIndex((prev) => (prev >= selectedReviewImages.length - 1 ? 0 : prev + 1))
+  }
 
   const handleSyncReviews = async () => {
     setSyncing(true)
@@ -594,7 +934,66 @@ export default function PartnerReviewQueryPage() {
     }
   }
 
-  const handleExportExcel = () => {
+
+
+  const handleAnalyzePartnerAI = async () => {
+    if (aiLoading) return
+
+    if (!filtered.length) {
+      setAiError('Chưa có review phù hợp để AI phân tích.')
+      return
+    }
+
+    setAiLoading(true)
+    setAiError('')
+    setAiReport('')
+
+    try {
+      const payloadReviews = filtered
+        .slice(0, 300)
+        .map(makePartnerAIReviewPayload)
+
+      const res = await api.post(
+        '/api/partner/review-ai/insight',
+        {
+          keyword: filters.keyword,
+          category: filters.category,
+          visibility: filters.visibility,
+          sourceSystem: filters.sourceSystem,
+          totalReviews: filtered.length,
+          reviews: payloadReviews,
+        },
+        {
+          timeout: 120000,
+        }
+      )
+
+      setAiReport(res.data?.report || 'AI chưa trả về nội dung báo cáo.')
+    } catch (err) {
+      const msg =
+        err.response?.data?.message ||
+        err.response?.data?.detail ||
+        err.message ||
+        'Lỗi khi AI phân tích review.'
+
+      setAiError(msg)
+    } finally {
+      setAiLoading(false)
+    }
+  }
+
+
+const handleRefreshPartnerAI = () => {
+  if (aiLoading || filtered.length === 0) {
+    setAiError(filtered.length === 0 ? 'Chưa có review phù hợp để AI phân tích.' : '')
+    return
+  }
+
+  handleAnalyzePartnerAI()
+}
+
+const handleExportExcel = () => {
+
     const columns = [
       'Mã review',
       'Đối tượng',
@@ -750,9 +1149,12 @@ export default function PartnerReviewQueryPage() {
             <SparkLine tone={item.tone} />
           </article>
         ))}
-      </section>
 
-      <section className={styles.workspaceGrid}>
+</section>
+
+
+<section className={styles.workspaceGrid}>
+
         <div className={styles.leftColumn}>
           <section className={styles.filterCard}>
             <div className={styles.sectionTitleBlock}>
@@ -920,6 +1322,16 @@ export default function PartnerReviewQueryPage() {
         </div>
 
         <aside className={styles.rightColumn}>
+          <PartnerReviewAIInsight
+            reviews={filtered}
+            filters={filters}
+            aiReport={aiReport}
+            aiLoading={aiLoading}
+            aiError={aiError}
+            onAnalyze={handleAnalyzePartnerAI}
+            onRefresh={handleRefreshPartnerAI}
+          />
+
           <section className={styles.analyticsCard}>
             <div className={styles.sideHeader}>
               <div>
@@ -980,6 +1392,8 @@ export default function PartnerReviewQueryPage() {
         <div className={styles.modalOverlay} onClick={handleCloseReview}>
           <div className={styles.modalCard} onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true">
             <div className={styles.modalHeaderPro}>
+              <button type="button" className={styles.modalBackBtn} onClick={handleCloseReview} aria-label="Quay lại">‹</button>
+
               <div className={styles.modalIdentity}>
                 <div className={`${styles.modalAvatar} ${styles[getAvatarTone(selectedReview)]}`}>
                   {makeInitials(selectedReview.targetName || selectedReview.partnerName)}
@@ -994,16 +1408,27 @@ export default function PartnerReviewQueryPage() {
                     </i>
                     <i className={styles.visibilityMeta}>{selectedReview.visibility || 'public'}</i>
                   </div>
-                  <p>Xem thông tin review theo từng nhóm nội dung để dễ theo dõi hơn.</p>
                 </div>
               </div>
+
               <button type="button" className={styles.modalCloseBtn} onClick={handleCloseReview} aria-label="Đóng popup">×</button>
             </div>
 
             <div className={styles.modalTabs}>
-              <button type="button" className={activeTab === 'overview' ? styles.modalTabActive : ''} onClick={() => setActiveTab('overview')}>Thông tin chung</button>
-              <button type="button" className={activeTab === 'content' ? styles.modalTabActive : ''} onClick={() => setActiveTab('content')}>Nội dung đánh giá</button>
-              <button type="button" className={activeTab === 'meta' ? styles.modalTabActive : ''} onClick={() => setActiveTab('meta')}>Metadata / API</button>
+              <button type="button" className={activeTab === 'overview' ? styles.modalTabActive : ''} onClick={() => setActiveTab('overview')}>
+                <span className={styles.modalTabIcon}><ReviewSoftIcon name="info" /></span>
+                <span>Thông tin chung</span>
+              </button>
+
+              <button type="button" className={activeTab === 'content' ? styles.modalTabActive : ''} onClick={() => setActiveTab('content')}>
+                <span className={styles.modalTabIcon}><ReviewSoftIcon name="comment" /></span>
+                <span>Nội dung đánh giá</span>
+              </button>
+
+              <button type="button" className={activeTab === 'meta' ? styles.modalTabActive : ''} onClick={() => setActiveTab('meta')}>
+                <span className={styles.modalTabIcon}><ReviewSoftIcon name="code" /></span>
+                <span>Metadata / API</span>
+              </button>
             </div>
 
             <div className={styles.modalBody}>
@@ -1031,32 +1456,131 @@ export default function PartnerReviewQueryPage() {
 
               {activeTab === 'content' && (
                 <div className={styles.contentTabPro}>
-                  <div className={styles.reviewHeroCard}>
-                    <div className={styles.reviewHeroTop}>
-                      <span>Đánh giá tổng thể</span>
-                      <b>{Number(selectedReview.rating || 0) >= 4 ? 'Positive Review' : 'Needs Attention'}</b>
+                  <section className={styles.reviewSummaryCard}>
+                    <div className={styles.reviewSummaryMain}>
+                      <span className={styles.reviewCardEyebrow}>Đánh giá tổng thể</span>
+                      <div className={styles.reviewRatingRow}>
+                        <strong>{selectedReview.rating || 0}</strong>
+                        <span>/5 sao</span>
+                      </div>
+                      <div className={styles.reviewStarLine}>{makeStars(selectedReview.rating)}</div>
                     </div>
-                    <div className={styles.reviewScoreLine}>
-                      <strong>{selectedReview.rating || 0}</strong>
-                      <span>/5 sao</span>
-                      <em>{makeStars(selectedReview.rating)}</em>
-                    </div>
-                    <div className={styles.reviewDivider} />
-                    <div className={styles.reviewCommentBlock}>
-                      <h4>Nội dung đánh giá</h4>
-                      <p>{selectedReview.comment || 'Không có nội dung đánh giá.'}</p>
-                    </div>
-                  </div>
 
-                  <div className={styles.highlightPanel}>
-                    <h4>Điểm mạnh nổi bật</h4>
-                    <div className={styles.highlightPills}>
-                      <span>Sạch sẽ</span>
-                      <span>Đúng giờ</span>
-                      <span>Tài xế lịch sự</span>
-                      <span>Dịch vụ tốt</span>
-                    </div>
-                  </div>
+                    <b className={Number(selectedReview.rating || 0) >= 4 ? styles.positiveReviewBadge : styles.attentionReviewBadge}>
+                      {Number(selectedReview.rating || 0) >= 4 ? '☺ Positive Review' : 'Needs Attention'}
+                    </b>
+                  </section>
+
+                  <section className={styles.reviewCommentCardPro}>
+                    <h4 className={styles.reviewSectionHeading}>
+                      <span className={styles.reviewSectionIcon}><ReviewSoftIcon name="comment" /></span>
+                      <span>Nội dung đánh giá</span>
+                    </h4>
+                    <p>{selectedReview.comment || 'Không có nội dung đánh giá.'}</p>
+                  </section>
+
+                  {shouldShowReviewImage && (
+                    <section className={styles.reviewAttachmentCard}>
+                      <div className={styles.reviewAttachmentHeader}>
+                        <h4 className={styles.reviewSectionHeading}>
+                          <span className={styles.reviewSectionIcon}><ReviewSoftIcon name="image" /></span>
+                          <span>Hình ảnh đính kèm</span>
+                        </h4>
+
+                        {isSingleReviewImage ? (
+                          <span className={styles.reviewImageBadge}>1 ảnh</span>
+                        ) : (
+                          <div className={styles.reviewImageControls}>
+                            <span>Ảnh {activeReviewImageIndex + 1}/{selectedReviewImages.length}</span>
+                            <button
+                              type="button"
+                              onClick={handlePrevReviewImage}
+                              disabled={!hasMultipleReviewImages}
+                              aria-label="Ảnh trước"
+                            >
+                              ‹
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleNextReviewImage}
+                              disabled={!hasMultipleReviewImages}
+                              aria-label="Ảnh sau"
+                            >
+                              ›
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      {isSingleReviewImage ? (
+                        <button
+                          type="button"
+                          className={styles.reviewSingleImageButton}
+                          onClick={() => window.open(activeReviewImageUrl, '_blank', 'noopener,noreferrer')}
+                          aria-label={`Xem ảnh đánh giá số ${activeReviewImage?.displayIndex || activeReviewImage?.index || ''}`}
+                        >
+                          <img
+                            src={activeReviewImageUrl}
+                            alt={`Ảnh đánh giá số ${activeReviewImage?.displayIndex || activeReviewImage?.index || ''}`}
+                            loading="lazy"
+                            onError={() => {
+                              setHiddenReviewImages((prev) => ({
+                                ...prev,
+                                [activeReviewImageUrl]: true,
+                              }))
+                            }}
+                          />
+                        </button>
+                      ) : (
+                        <div className={styles.reviewImageGalleryBody}>
+                          <button
+                            type="button"
+                            className={styles.reviewMainImageButton}
+                            onClick={() => window.open(activeReviewImageUrl, '_blank', 'noopener,noreferrer')}
+                            aria-label={`Xem ảnh đánh giá số ${activeReviewImage?.displayIndex || activeReviewImage?.index || ''}`}
+                          >
+                            <img
+                              src={activeReviewImageUrl}
+                              alt={`Ảnh đánh giá số ${activeReviewImage?.displayIndex || activeReviewImage?.index || ''}`}
+                              loading="lazy"
+                              onError={() => {
+                                setHiddenReviewImages((prev) => ({
+                                  ...prev,
+                                  [activeReviewImageUrl]: true,
+                                }))
+                              }}
+                            />
+                          </button>
+
+                          <aside className={styles.reviewThumbnailPanel}>
+                            <div className={styles.reviewThumbnailList}>
+                              {selectedReviewImages.map((image, imageIndex) => (
+                                <button
+                                  type="button"
+                                  key={`${image.url}-${imageIndex}`}
+                                  className={imageIndex === activeReviewImageIndex ? styles.reviewThumbnailActive : ''}
+                                  onClick={() => setActiveReviewImageIndex(imageIndex)}
+                                  aria-label={`Chọn ảnh ${imageIndex + 1}`}
+                                >
+                                  <img
+                                    src={image.url}
+                                    alt={`Thumbnail ảnh đánh giá ${imageIndex + 1}`}
+                                    loading="lazy"
+                                    onError={() => {
+                                      setHiddenReviewImages((prev) => ({
+                                        ...prev,
+                                        [image.url]: true,
+                                      }))
+                                    }}
+                                  />
+                                </button>
+                              ))}
+                            </div>
+                          </aside>
+                        </div>
+                      )}
+                    </section>
+                  )}
                 </div>
               )}
 

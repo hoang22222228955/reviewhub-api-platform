@@ -577,7 +577,14 @@ Tôi có thể hỗ trợ:
         onClick={() => setOpen(o => !o)}
         title="Chat hỗ trợ"
       >
-        {open ? '✕' : 'Chat'}
+        {open ? (
+          <span className={styles.closeIcon}>×</span>
+        ) : (
+          <>
+            <span className={styles.botIcon}>AI</span>
+            <span className={styles.pulse}></span>
+          </>
+        )}
 
         {!open && unreadTotal > 0 && (
           <span className={styles.fabBadge}>

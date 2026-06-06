@@ -106,10 +106,17 @@ vinpearlresort@reviewhub.vn/ 123456
 code: 'KS-003', name: 'FLC Grand Hotel Hạ Long'
 halong@reviewhub.vn/ 123456
 
+code: 'KS-004', name: 'InterContinental Hanoi Westlake
+hoangtran@reviewhub.vn/ 123456
 
 cd C:\Users\Admin\Downloads\reviewhub-api-platform-main\reviewhub-api-platform-main\backend\reviewhub
 $env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-17.0.19.10-hotspot"
 .\mvnw.cmd clean spring-boot:run
+
+cd C:\reviewhub-api-platform2-master\backend\reviewhub
+$env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-17.0.19.10-hotspot"
+.\mvnw.cmd clean spring-boot:run
+
 
 chạy frontend:
 npm run dev
