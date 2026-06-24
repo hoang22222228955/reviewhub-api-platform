@@ -237,11 +237,15 @@
 }
 
 .compactValue {
-  max-width: 155px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  max-width: none;
+  width: fit-content;
+  overflow: visible;
+  text-overflow: clip;
   white-space: nowrap;
-  font-size: 18.5px !important;
+  word-break: normal;
+  overflow-wrap: normal;
+  font-size: 19px !important;
+  line-height: 1.08 !important;
   letter-spacing: -.02em !important;
 }
 
@@ -473,3 +477,133 @@
   .quotaShell,
   .tableCard { padding: 16px; border-radius: 16px; }
 }
+
+/* ===== FIX QUOTA CARD: chỉ giữ 1 viền ngoài, bỏ khung trong ===== */
+.quotaShell {
+  padding: 0;
+  overflow: hidden;
+}
+
+.quotaShell > * {
+  width: 100%;
+  height: 100%;
+  border: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  border-radius: 0 !important;
+}
+
+/* ===== CLEAN NAME + QUOTA TYPOGRAPHY FINAL ===== */
+/* Tên nhà xe: giữ 1 dòng gọn, không bị bẻ từng chữ */
+.compactValue {
+  display: block;
+  max-width: 210px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+  font-size: 18px !important;
+  line-height: 1.25 !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.018em !important;
+  word-break: normal !important;
+  overflow-wrap: normal !important;
+}
+
+/* Khung gói hiện tại: chỉ 1 lớp, chữ nhỏ lại cho đồng bộ dashboard */
+.quotaShell {
+  padding: 20px 22px !important;
+  border: 1px solid rgba(226, 231, 241, .95);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, .9);
+  box-shadow: 0 14px 32px rgba(29, 38, 69, .055);
+  backdrop-filter: blur(14px);
+  overflow: hidden;
+}
+
+.quotaShell > * {
+  width: 100%;
+  height: 100%;
+  border: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.quotaShell h1,
+.quotaShell h2,
+.quotaShell h3 {
+  margin: 0 0 16px !important;
+  color: #242b3f !important;
+  font-size: 21px !important;
+  line-height: 1.18 !important;
+  font-weight: 620 !important;
+  letter-spacing: -0.025em !important;
+}
+
+.quotaShell p,
+.quotaShell span,
+.quotaShell small,
+.quotaShell div {
+  font-size: 13px !important;
+  line-height: 1.45 !important;
+  font-weight: 430 !important;
+  color: #667085;
+}
+
+.quotaShell strong,
+.quotaShell b {
+  color: #253047 !important;
+  font-size: 13px !important;
+  line-height: 1.45 !important;
+  font-weight: 600 !important;
+  letter-spacing: 0 !important;
+}
+
+/* Badge "Còn 30 ngày" nhỏ và nhẹ hơn */
+.quotaShell :global([class*="badge"]),
+.quotaShell :global([class*="Badge"]),
+.quotaShell :global([class*="remain"]),
+.quotaShell :global([class*="Remain"]) {
+  height: 28px !important;
+  padding: 0 11px !important;
+  border-radius: 999px !important;
+  font-size: 11.5px !important;
+  font-weight: 600 !important;
+  line-height: 1 !important;
+}
+
+/* Thanh progress mềm hơn */
+.quotaShell :global([class*="progress"]),
+.quotaShell :global([class*="Progress"]) {
+  min-height: 8px;
+  border-radius: 999px !important;
+}
+
+
+/* ===== PATCH: chỉ bo tròn khung ngoài, KHÔNG giảm chiều ngang ===== */
+.pageShell {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+}
+
+.dashboardPanel {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  border-radius: 24px !important;
+}
+
+/* Mobile vẫn giữ full chiều ngang theo container, chỉ giảm nhẹ độ bo cho cân đối */
+@media (max-width: 760px) {
+  .dashboardPanel {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    border-radius: 18px !important;
+  }
+}
+

@@ -32,8 +32,19 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
         String path = request.getServletPath();
 
+        /*
+         * KHÔNG bỏ qua /api/auth/me.
+         * /api/auth/me cần JwtAuthFilter đọc Authorization: Bearer <token>
+         * để set AuthenticationPrincipal User cho AuthController.me().
+         */
+        boolean publicAuthRoute =
+                path.equals("/api/auth/login") ||
+                path.equals("/api/auth/register") ||
+                path.equals("/api/auth/forgot-password") ||
+                path.equals("/api/auth/reset-password");
+
         if (
-                path.startsWith("/api/auth/") ||
+                publicAuthRoute ||
                 path.equals("/api/health") ||
                 path.equals("/api/operators") ||
                 path.startsWith("/api/plans") ||

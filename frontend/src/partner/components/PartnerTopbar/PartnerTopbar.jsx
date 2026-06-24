@@ -30,15 +30,13 @@ export default function PartnerTopbar() {
   return (
     <div className={styles.topbar}>
       <div className={styles.content}>
-        <div className={styles.eyebrow}>
-          PARTNER WORKSPACE
-        </div>
+        <div className={styles.eyebrow}>Partner workspace</div>
 
-        <h1>Cổng đối tác</h1>
+        <h1>Không gian đối tác ReviewHub</h1>
 
         <p>
-          Quản lý quota, API key, gửi review, lấy review và theo dõi quyền lợi đối tác
-          trong một không gian làm việc gọn gàng, hiện đại.
+          Theo dõi quota, API key, review đã gửi và quyền lợi gói dịch vụ trong khu vực
+          quản lý riêng dành cho partner.
         </p>
       </div>
 

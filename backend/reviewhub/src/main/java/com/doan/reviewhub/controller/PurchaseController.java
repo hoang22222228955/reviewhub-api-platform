@@ -14,7 +14,9 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -57,6 +59,138 @@ public class PurchaseController {
         }
 
         return null;
+    }
+
+    // BỔ SUNG NHẸ: đọc dữ liệu gói tự chọn mà không đổi bảng / không thêm cột DB.
+    private String readString(Object value) {
+        return value == null ? "" : value.toString().trim();
+    }
+
+    private int readInt(Object value, int fallback) {
+        try {
+            if (value instanceof Number n) return n.intValue();
+            String text = readString(value);
+            if (!text.isBlank()) return Integer.parseInt(text);
+        } catch (Exception ignored) {
+        }
+        return fallback;
+    }
+
+    private List<String> readStringList(Object value) {
+        List<String> result = new ArrayList<>();
+
+        if (value instanceof Iterable<?> iterable) {
+            for (Object item : iterable) {
+                String text = readString(item);
+                if (!text.isBlank()) result.add(text);
+            }
+            return result;
+        }
+
+        String raw = readString(value);
+        if (raw.isBlank()) return result;
+
+        for (String part : raw.split(",")) {
+            String text = part.trim();
+            if (!text.isBlank()) result.add(text);
+        }
+
+        return result;
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) return value.trim();
+        }
+        return "";
+    }
+
+    private boolean isCustomPlan(String planId) {
+        return planId != null && planId.trim().equalsIgnoreCase("custom");
+    }
+
+    private String normalizeCustomLevel(String level) {
+        String value = level == null ? "" : level.trim().toLowerCase();
+        if (value.equals("growth") || value.equals("enterprise") || value.equals("starter")) return value;
+        return "starter";
+    }
+
+    private String resolvePlanIdForLookup(String planId, String level) {
+        return isCustomPlan(planId) ? normalizeCustomLevel(level) : planId;
+    }
+
+    private String readStatusField(String status, String key) {
+        if (status == null || status.isBlank() || key == null || key.isBlank()) return "";
+        String prefix = key + "=";
+        for (String part : status.split("\\|")) {
+            String text = part.trim();
+            if (text.startsWith(prefix)) return text.substring(prefix.length()).trim();
+        }
+        return "";
+    }
+
+    private String cleanStatusLabel(String status) {
+        if (status == null) return "";
+        int pipe = status.indexOf('|');
+        return pipe >= 0 ? status.substring(0, pipe) : status;
+    }
+
+    private String buildPendingStatus(String paymentMethod, int qty, List<String> selectedServiceCodes, List<String> categories, String level) {
+        String method = paymentMethod == null || paymentMethod.isBlank() ? "banking" : paymentMethod.trim();
+        String status = "pending:" + method + "|qty=" + Math.max(1, qty);
+
+        if (!selectedServiceCodes.isEmpty()) {
+            status += "|service=" + selectedServiceCodes.get(0);
+            status += "|items=" + String.join(",", selectedServiceCodes);
+        }
+
+        if (!categories.isEmpty()) {
+            status += "|categories=" + String.join(",", categories);
+        }
+
+        if (level != null && !level.isBlank()) {
+            status += "|level=" + normalizeCustomLevel(level);
+        }
+
+        return status;
+    }
+
+    private String selectedServiceCode(PurchaseHistory history) {
+        return readStatusField(history.getStatus(), "service");
+    }
+
+    private String selectedServiceCodes(PurchaseHistory history) {
+        String items = readStatusField(history.getStatus(), "items");
+        return !items.isBlank() ? items : selectedServiceCode(history);
+    }
+
+    private String selectedCategories(PurchaseHistory history) {
+        return readStatusField(history.getStatus(), "categories");
+    }
+
+    private String customLevel(PurchaseHistory history) {
+        return readStatusField(history.getStatus(), "level");
+    }
+
+    private int countSelectedServices(PurchaseHistory history) {
+        List<String> codes = readStringList(selectedServiceCodes(history));
+        return Math.max(1, codes.size());
+    }
+
+    private String getDisplayPlanName(String planId, Plan plan, String level) {
+        if (isCustomPlan(planId)) {
+            String safeLevel = normalizeCustomLevel(level);
+            String levelName = plan != null && plan.getName() != null && !plan.getName().isBlank()
+                    ? plan.getName()
+                    : switch (safeLevel) {
+                        case "growth" -> "Tăng trưởng";
+                        case "enterprise" -> "Doanh nghiệp";
+                        default -> "Khởi đầu";
+                    };
+            return "Tự chọn - " + levelName;
+        }
+
+        return plan != null && plan.getName() != null ? plan.getName() : planId;
     }
 
     /**
@@ -157,15 +291,16 @@ public class PurchaseController {
 
         List<Map<String, Object>> result = list.stream()
                 .map(h -> {
-                    Plan p = planMap.get(h.getPlanId());
+                    String lookupPlanId = resolvePlanIdForLookup(h.getPlanId(), customLevel(h));
+                    Plan p = planMap.get(lookupPlanId);
 
                     return Map.<String, Object>of(
                             "id", h.getId(),
                             "planId", h.getPlanId(),
-                            "planName", p != null ? p.getName() : h.getPlanId(),
+                            "planName", getDisplayPlanName(h.getPlanId(), p, customLevel(h)),
                             "amount", h.getAmount(),
                             "purchasedAt", h.getPurchasedAt() != null ? h.getPurchasedAt().toString() : "",
-                            "status", h.getStatus() != null ? h.getStatus() : ""
+                            "status", cleanStatusLabel(h.getStatus())
                     );
                 })
                 .toList();
@@ -214,20 +349,26 @@ public class PurchaseController {
                     )
                     .map(h -> {
                         User u = userMap.get(h.getUserId());
-                        Plan p = planMap.get(h.getPlanId());
+                        String lookupPlanId = resolvePlanIdForLookup(h.getPlanId(), customLevel(h));
+                        Plan p = planMap.get(lookupPlanId);
 
-                        return Map.<String, Object>of(
-                                "id", h.getId(),
-                                "userId", h.getUserId() != null ? h.getUserId() : "",
-                                "partnerName", u != null && u.getName() != null ? u.getName() : "—",
-                                "partnerCode", u != null && u.getPartnerCode() != null ? u.getPartnerCode() : "—",
-                                "orgName", u != null && u.getOrgName() != null ? u.getOrgName() : "—",
-                                "planId", h.getPlanId() != null ? h.getPlanId() : "",
-                                "planName", p != null && p.getName() != null ? p.getName() : h.getPlanId(),
-                                "amount", h.getAmount(),
-                                "purchasedAt", h.getPurchasedAt() != null ? h.getPurchasedAt().toString() : "",
-                                "status", h.getStatus() != null ? h.getStatus() : ""
-                        );
+                        Map<String, Object> row = new LinkedHashMap<>();
+                        row.put("id", h.getId());
+                        row.put("userId", h.getUserId() != null ? h.getUserId() : "");
+                        row.put("partnerName", u != null && u.getName() != null ? u.getName() : "—");
+                        row.put("partnerCode", u != null && u.getPartnerCode() != null ? u.getPartnerCode() : "—");
+                        row.put("orgName", u != null && u.getOrgName() != null ? u.getOrgName() : "—");
+                        row.put("planId", h.getPlanId() != null ? h.getPlanId() : "");
+                        row.put("planName", getDisplayPlanName(h.getPlanId(), p, customLevel(h)));
+                        row.put("amount", h.getAmount());
+                        row.put("purchasedAt", h.getPurchasedAt() != null ? h.getPurchasedAt().toString() : "");
+                        row.put("status", cleanStatusLabel(h.getStatus()));
+                        row.put("selectedServiceCode", selectedServiceCode(h));
+                        row.put("selectedServiceCodes", selectedServiceCodes(h));
+                        row.put("selectedCategories", selectedCategories(h));
+                        row.put("customLevel", customLevel(h));
+                        row.put("assignedOperatorCode", u != null && u.getAssignedOperatorCode() != null ? u.getAssignedOperatorCode() : "");
+                        return row;
                     })
                     .toList();
 
@@ -247,7 +388,8 @@ public class PurchaseController {
     /**
      * Partner gửi yêu cầu thanh toán — chỉ tạo đơn pending.
      * POST /api/partner/submit-payment
-     * Body: { "planId": "starter", "qty": 1, "paymentMethod": "banking" }
+     * Body gói cũ: { "planId": "starter", "qty": 1, "paymentMethod": "banking" }
+     * Body gói tự chọn: { "planId": "custom", "level": "starter", "price": 720000, "selectedServiceCodes": ["PT-001", "PT-002"] }
      */
     @PostMapping("/api/partner/submit-payment")
     public ResponseEntity<?> submitPayment(
@@ -262,15 +404,11 @@ public class PurchaseController {
 
         User caller = (User) auth.getPrincipal();
 
-        String planId = body.get("planId") == null ? "" : body.get("planId").toString();
+        String planId = readString(body.get("planId"));
+        int qty = readInt(body.get("qty"), 1);
+        if (qty <= 0) qty = 1;
 
-        int qty = body.get("qty") instanceof Number n ? n.intValue() : 1;
-
-        if (qty <= 0) {
-            qty = 1;
-        }
-
-        String paymentMethod = body.getOrDefault("paymentMethod", "banking").toString();
+        String paymentMethod = firstNonBlank(readString(body.get("paymentMethod")), "banking");
 
         if (planId.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of(
@@ -279,16 +417,42 @@ public class PurchaseController {
             ));
         }
 
-        Plan plan = planRepository.findById(planId).orElse(null);
+        List<String> selectedServiceCodes = readStringList(
+                body.containsKey("selectedServiceCodes") ? body.get("selectedServiceCodes") : body.get("items")
+        );
+        List<String> categories = readStringList(
+                body.containsKey("categories") ? body.get("categories") : body.get("selectedCategories")
+        );
+
+        String level = firstNonBlank(readString(body.get("level")), readString(body.get("customLevel")));
+        if (isCustomPlan(planId)) level = normalizeCustomLevel(level);
+
+        String lookupPlanId = resolvePlanIdForLookup(planId, level);
+        Plan plan = planRepository.findById(lookupPlanId).orElse(null);
 
         if (plan == null) {
             return ResponseEntity.status(404).body(Map.of(
                     "success", false,
-                    "message", "Không tìm thấy gói: " + planId
+                    "message", isCustomPlan(planId)
+                            ? "Không tìm thấy mức gói tự chọn: " + lookupPlanId
+                            : "Không tìm thấy gói: " + planId
             ));
         }
 
-        int amount = plan.getPrice() * qty;
+        int selectedCount = Math.max(1, selectedServiceCodes.size());
+        int amount;
+
+        if (isCustomPlan(planId)) {
+            int priceFromFrontend = readInt(body.get("price"), 0);
+            int fallback = plan.getPrice() * selectedCount * qty;
+            if (selectedCount >= 2) {
+                fallback = (int) Math.round(fallback * 0.9);
+            }
+            amount = priceFromFrontend > 0 ? priceFromFrontend : fallback;
+        } else {
+            // Giữ nguyên logic cũ của 3 gói cố định: lấy giá từ DB.
+            amount = plan.getPrice() * qty;
+        }
 
         PurchaseHistory history = PurchaseHistory.builder()
                 .id(UUID.randomUUID().toString())
@@ -296,7 +460,7 @@ public class PurchaseController {
                 .planId(planId)
                 .amount(amount)
                 .purchasedAt(Instant.now())
-                .status("pending:" + paymentMethod)
+                .status(buildPendingStatus(paymentMethod, qty, selectedServiceCodes, categories, level))
                 .build();
 
         purchaseHistoryRepository.save(history);
@@ -339,12 +503,16 @@ public class PurchaseController {
             ));
         }
 
-        Plan plan = planRepository.findById(history.getPlanId()).orElse(null);
+        String level = customLevel(history);
+        String lookupPlanId = resolvePlanIdForLookup(history.getPlanId(), level);
+        Plan plan = planRepository.findById(lookupPlanId).orElse(null);
 
         if (plan == null) {
             return ResponseEntity.status(404).body(Map.of(
                     "success", false,
-                    "message", "Không tìm thấy gói."
+                    "message", isCustomPlan(history.getPlanId())
+                            ? "Không tìm thấy mức gói tự chọn: " + lookupPlanId
+                            : "Không tìm thấy gói."
             ));
         }
 
@@ -359,20 +527,24 @@ public class PurchaseController {
 
         Instant now = Instant.now();
 
-        int qty = 1;
-
-        if (plan.getPrice() > 0) {
-            qty = Math.max(1, history.getAmount() / plan.getPrice());
-        }
+        int qty = readInt(readStatusField(history.getStatus(), "qty"), 1);
+        if (qty <= 0) qty = 1;
 
         Instant expiresAt = now.plus((long) plan.getDurationDays() * qty, ChronoUnit.DAYS);
+        int serviceCount = isCustomPlan(history.getPlanId()) ? countSelectedServices(history) : 1;
 
-        user.setCurrentPlanId(plan.getId());
+        // Gói tự chọn dùng quyền của cấp bậc đã chọn: starter/growth/enterprise.
+        user.setCurrentPlanId(lookupPlanId);
         user.setPlanActivatedAt(now);
         user.setPlanExpiresAt(expiresAt);
-        user.setQuotaTotal(plan.getQuotaLimit() * qty);
+        user.setQuotaTotal(plan.getQuotaLimit() * qty * serviceCount);
         user.setQuotaUsed(0);
-        user.setMembershipLabel(plan.getName());
+        user.setMembershipLabel(getDisplayPlanName(history.getPlanId(), plan, level));
+
+        String selectedCodes = selectedServiceCodes(history);
+        if (!selectedCodes.isBlank()) {
+            user.setAssignedOperatorCode(selectedCodes);
+        }
 
         if (!"admin".equals(user.getRole())) {
             user.setRole("partner");
@@ -380,7 +552,10 @@ public class PurchaseController {
 
         userRepository.save(user);
 
-        history.setStatus("Đã thanh toán");
+        String oldStatus = history.getStatus() == null ? "" : history.getStatus();
+        int metaIndex = oldStatus.indexOf('|');
+        String metaSuffix = metaIndex >= 0 ? oldStatus.substring(metaIndex) : "";
+        history.setStatus("Đã thanh toán" + metaSuffix);
         purchaseHistoryRepository.save(history);
 
         return ResponseEntity.ok(Map.of(
@@ -413,7 +588,10 @@ public class PurchaseController {
             ));
         }
 
-        history.setStatus("Từ chối");
+        String oldStatus = history.getStatus() == null ? "" : history.getStatus();
+        int metaIndex = oldStatus.indexOf('|');
+        String metaSuffix = metaIndex >= 0 ? oldStatus.substring(metaIndex) : "";
+        history.setStatus("Từ chối" + metaSuffix);
         purchaseHistoryRepository.save(history);
 
         return ResponseEntity.ok(Map.of(

@@ -381,7 +381,7 @@ export default function PartnerReviewAIInsight({
 
           <div className={styles.partnerAiTitleBlock}>
             <h3>AI phân tích review</h3>
-            <p>Tóm tắt nhanh đánh giá của khách hàng dành cho nhà xe.</p>
+            <p>Tóm tắt nhanh đánh giá của khách hàng dành cho dịch vụ.</p>
           </div>
         </div>
 

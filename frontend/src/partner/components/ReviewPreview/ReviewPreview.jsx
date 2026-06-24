@@ -19,7 +19,7 @@ export default function ReviewPreview({ review }) {
         <div className={styles.empty}>
           <span>Preview</span>
           <h3>Chưa có review</h3>
-          <p>Review vừa gửi sẽ xuất hiện ở đây với bố cục tối giản, dễ kiểm tra.</p>
+          <p>Review vừa gửi sẽ nằm ở hàng chờ kiểm duyệt trước khi hiển thị cho partner.</p>
         </div>
       </aside>
     )
@@ -34,7 +34,7 @@ export default function ReviewPreview({ review }) {
         <div>
           <p className={styles.kicker}>Review preview</p>
           <h3>{review.targetName || 'Review vừa gửi'}</h3>
-          <p>Thông tin đã chuẩn hóa trước khi hiển thị cho partner.</p>
+          <p>Thông tin đã chuẩn hóa và đang chờ admin kiểm duyệt.</p>
         </div>
 
         <span className={styles.status}>{getStatusLabel(review.moderationStatus)}</span>
@@ -65,11 +65,11 @@ export default function ReviewPreview({ review }) {
           <dd>{review.category || '—'}</dd>
         </div>
         <div>
-          <dt>Visibility</dt>
+          <dt>Phạm vi</dt>
           <dd>{review.visibility || '—'}</dd>
         </div>
         <div>
-          <dt>Trạng thái</dt>
+          <dt>Kiểm duyệt</dt>
           <dd>{getStatusLabel(review.moderationStatus)}</dd>
         </div>
       </dl>

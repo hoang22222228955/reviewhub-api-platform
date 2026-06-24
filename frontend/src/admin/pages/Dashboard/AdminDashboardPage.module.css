@@ -546,3 +546,48 @@
 .kpiText small {
   max-width: 150px;
 }
+
+
+/* ===== PATCH: chỉ bo tròn khung ngoài, KHÔNG đổi chiều ngang / logic ===== */
+.pageShell {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+}
+
+.dashboardPanel {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  border-radius: 24px !important;
+}
+
+/* Các khối chính vẫn giữ full chiều ngang theo container hiện tại */
+.pageHeader,
+.topGrid,
+.kpiGrid,
+.chartCard,
+.infoGrid {
+  max-width: none;
+}
+
+/* Bo mềm thêm các card chính cho đồng bộ với các trang partner */
+.kpiCard,
+.infoCard {
+  border-radius: 18px;
+}
+
+.chartCard {
+  border-radius: 22px;
+}
+
+/* Mobile vẫn full ngang, chỉ giảm độ bo cho cân đối */
+@media (max-width: 860px) {
+  .dashboardPanel {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    border-radius: 18px !important;
+  }
+}
+

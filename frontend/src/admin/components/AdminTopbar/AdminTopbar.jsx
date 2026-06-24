@@ -21,18 +21,17 @@ export default function AdminTopbar() {
     'Admin'
   )
 
-  const displayName = currentUser?.name || 'Tài khoản admin'
+  const displayName = currentUser?.name || 'Quản trị viên'
 
   return (
     <div className={styles.topbar}>
       <div className={styles.content}>
         <div className={styles.eyebrow}>Admin console</div>
 
-        <h1>Khu quản trị ReviewHub</h1>
+        <h1>Trung tâm quản trị ReviewHub</h1>
 
         <p>
-          Trang admin được tách riêng hoàn toàn khỏi partner và giao diện public,
-          giúp cấu trúc rõ ràng và đỡ rối hơn.
+          Theo dõi hệ thống, kiểm duyệt review, quản lý partner và cấu hình gói dịch vụ.
         </p>
       </div>
 

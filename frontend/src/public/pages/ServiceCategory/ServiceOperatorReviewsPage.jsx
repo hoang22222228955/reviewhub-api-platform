@@ -4,8 +4,10 @@ import api from '../../../services/api';
 import styles from './ServiceOperatorReviewsPage.module.css';
 
 const REVIEW_ENDPOINTS = [
+  // Giữ lại luồng lấy dữ liệu cũ để trang public không bị mất review đã có.
   '/api/admin/reviews?size=10000',
   '/api/admin/review-ai/all',
+  '/api/reviews?size=10000&visibility=public&sourceSystem=all',
   '/api/reviews?size=10000',
   '/api/public/reviews?size=10000',
   '/api/reviews',
@@ -21,13 +23,12 @@ const OPERATOR_ENDPOINTS = [
 ];
 
 const REVIEW_POST_ENDPOINTS = [
-  // Ưu tiên endpoint Partner trước để review public gửi từ trang dịch vụ
-  // xuất hiện trong trang quản lý Partner.
-  '/api/partner/reviews',
-  '/api/partner/reviews/submit',
+  // Review khách gửi từ trang public phải đi vào hàng chờ Admin Moderation,
+  // không gửi sang Partner SLA và không hiển thị ngay trên trang public.
   '/api/reviews',
   '/api/reviews/submit',
   '/api/public/reviews',
+  '/api/public/reviews/submit',
 ];
 
 const LOCAL_REVIEW_KEY = 'reviewhub-public-service-reviews';
@@ -157,6 +158,27 @@ function getReviewImageFolderBySlug(slug = 'nha-xe') {
 function normalizeOperatorCode(value = '') {
   return String(value || '').trim().toUpperCase();
 }
+
+function getOperatorCodeFolderVariants(value = '') {
+  const code = normalizeOperatorCode(value);
+  if (!code) return [];
+
+  const variants = [code];
+
+  const matched = code.match(/^([A-Z]{2})-(\d+)$/);
+  if (matched) {
+    const prefix = matched[1];
+    const number = Number(matched[2]);
+
+    if (Number.isFinite(number) && number > 0) {
+      variants.push(`${prefix}-${number}`);
+      variants.push(`${prefix}-${String(number).padStart(3, '0')}`);
+    }
+  }
+
+  return Array.from(new Set(variants));
+}
+
 
 function makeReviewId(operatorCode = '') {
   const safeCode = normalizeOperatorCode(operatorCode) || 'PT-000';
@@ -325,6 +347,128 @@ function getExplicitReviewImages(review = {}) {
   pushValue(review.image_urls);
 
   return list;
+}
+
+
+function getReviewImageFileNameFromReview(review = {}) {
+  const value = firstText(
+    review.imageFileName,
+    review.image_file_name,
+    review.imageName,
+    review.image_name,
+    review.photoFileName,
+    review.photo_file_name,
+  );
+
+  if (!value) return '';
+
+  return String(value).trim().toLowerCase().endsWith('.webp')
+    ? String(value).trim()
+    : `${String(value).trim()}.webp`;
+}
+
+function getReviewImageCandidateUrls(review = {}, operator = {}, serviceMeta = getServiceMeta(), sequentialIndex = 0) {
+  const urls = [];
+
+  const push = (url) => {
+    const text = String(url || '').trim();
+    if (text && !urls.includes(text)) urls.push(text);
+  };
+
+  const serviceSlug = getReviewServiceSlug(review, serviceMeta) || serviceMeta.slug;
+  const categoryFolder = getReviewImageFolderBySlug(serviceSlug);
+
+  /*
+   * QUAN TRỌNG:
+   * Trang public đang xem 1 nhà xe cụ thể, nên folder ảnh phải lấy theo operator.code hiện tại.
+   * Không lấy review.id / GM-xxx / review.code trước, vì Google review cũ có thể mang mã GM
+   * làm sai folder ảnh.
+   */
+  const operatorCode = normalizeOperatorCode(firstText(
+    operator?.code,
+    review.targetCode,
+    review.target_code,
+    review.operatorCode,
+    review.operator_code,
+    review.partnerCode,
+    review.partner_code,
+    review.ownerPartnerCode,
+    review.owner_partner_code,
+    review.code,
+  ));
+
+  const folderCodes = getOperatorCodeFolderVariants(operatorCode);
+  if (!folderCodes.length) return urls;
+
+  // Nếu backend/localStorage có tên file ảnh thật.
+  const imageFileName = getReviewImageFileNameFromReview(review);
+  if (imageFileName) {
+    folderCodes.forEach((folderCode) => {
+      push(`/anhdanggia/${categoryFolder}/${folderCode}/${imageFileName}`);
+    });
+  }
+
+  // Nếu review mới có id dạng PT-013-1F9021D0 thì ảnh là 1F9021D0.webp.
+  // Không áp dụng với GM-025-067 vì Google review cũ của bạn đánh ảnh theo thứ tự cmt.
+  const reviewId = firstText(review.id, review.reviewId, review.review_id);
+  const tokenMatch = String(reviewId || '').trim().match(/^(PT|KS|MB|TH|TO|DV)-\d{3}-(.+)$/i);
+  if (tokenMatch?.[2]) {
+    folderCodes.forEach((folderCode) => {
+      push(`/anhdanggia/${categoryFolder}/${folderCode}/${tokenMatch[2]}.webp`);
+    });
+  }
+
+  /*
+   * LOGIC CHÍNH BẠN YÊU CẦU:
+   * Cmt cũ nhất = 1.webp
+   * Cmt tiếp theo = 2.webp
+   * Cmt thứ 200 = 200.webp
+   *
+   * sequentialIndex phải được tính từ danh sách reviews gốc theo createdAt tăng dần,
+   * không được tính theo trang hiện tại hoặc sort "Mới nhất".
+   */
+  const safeIndex = Number(sequentialIndex);
+  if (Number.isFinite(safeIndex) && safeIndex > 0) {
+    folderCodes.forEach((folderCode) => {
+      push(`/anhdanggia/${categoryFolder}/${folderCode}/${Math.trunc(safeIndex)}.webp`);
+    });
+  }
+
+  return urls;
+}
+
+
+function ReviewImageGallery({ review, operator, serviceMeta, sequentialIndex }) {
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+
+  const explicitImages = getExplicitReviewImages(review);
+  const candidateImages = explicitImages.length
+    ? explicitImages
+    : getReviewImageCandidateUrls(review, operator, serviceMeta, sequentialIndex);
+
+  if (!candidateImages.length) return null;
+
+  const currentImage = candidateImages[activeImageIndex];
+
+  if (!currentImage) return null;
+
+  return (
+    <div className={styles.reviewGallery}>
+      <img
+        key={currentImage}
+        className={styles.reviewThumb}
+        src={currentImage}
+        alt={`Ảnh đánh giá ${sequentialIndex || ''}`}
+        loading="lazy"
+        onError={() => {
+          setActiveImageIndex((prev) => {
+            const next = prev + 1;
+            return next < candidateImages.length ? next : candidateImages.length;
+          });
+        }}
+      />
+    </div>
+  );
 }
 
 function getReviewStorageKey(slug = 'nha-xe') {
@@ -671,8 +815,8 @@ function normalizeReview(raw, index = 0, serviceMeta = getServiceMeta()) {
     rating: toNumber(firstText(raw?.rating, raw?.score, raw?.stars, raw?.avgRating, raw?.averageRating), 0),
     createdAt: reviewCreatedAt(raw, index),
     visibility: firstText(raw?.visibility, 'public'),
-    moderationStatus: firstText(raw?.moderationStatus, raw?.status, raw?.reviewStatus, 'pending_review'),
-    sourceSystem: firstText(raw?.sourceSystem, raw?.source, 'partner-web'),
+    moderationStatus: firstText(raw?.moderationStatus, raw?.moderation_status, raw?.status, raw?.reviewStatus, raw?.review_status, 'pending_review'),
+    sourceSystem: firstText(raw?.sourceSystem, raw?.source_system, raw?.source, 'google-maps'),
     imageUrl: firstText(raw?.imageUrl, raw?.image_url, raw?.reviewImage, raw?.review_image, raw?.photoUrl, raw?.photo_url, ''),
     reviewImage: firstText(raw?.reviewImage, raw?.review_image, raw?.imageUrl, raw?.image_url, raw?.photoUrl, raw?.photo_url, ''),
     imageFileName: firstText(raw?.imageFileName, raw?.image_file_name, raw?.imageName, raw?.image_name, ''),
@@ -933,7 +1077,8 @@ function sourceLabel(value) {
   const source = String(value || '').toLowerCase();
   if (source.includes('google')) return 'Google Maps';
   if (source.includes('vexere')) return 'Vexere';
-  if (source.includes('partner')) return 'ReviewHub';
+  if (source.includes('partner')) return 'Partner';
+  if (source.includes('public') || source.includes('user') || source.includes('community')) return 'Người dùng';
   return 'Cộng đồng';
 }
 
@@ -943,6 +1088,38 @@ function statusInfo(review) {
   if (raw.includes('approved') || raw.includes('public')) return { label: 'approved', className: 'statusApproved' };
   if (raw.includes('flag') || raw.includes('reject')) return { label: 'flagged', className: 'statusFlagged' };
   return { label: 'pending', className: 'statusPending' };
+}
+
+function isApprovedVisibleReview(review) {
+  const status = String(
+    review?.moderationStatus ||
+    review?.moderation_status ||
+    review?.status ||
+    review?.reviewStatus ||
+    review?.review_status ||
+    ''
+  ).toLowerCase();
+
+  const source = String(
+    review?.sourceSystem ||
+    review?.source_system ||
+    review?.source ||
+    ''
+  ).toLowerCase();
+
+  if (status.includes('reject') || status.includes('decline') || status.includes('refuse')) {
+    return false;
+  }
+
+  // Review do khách ngoài public hoặc tài khoản partner gửi phải chờ admin duyệt,
+  // nên pending_review không được hiện ngay ở trang public.
+  if (source.includes('public') || source.includes('partner')) {
+    return status.includes('approved') || status.includes('public');
+  }
+
+  // Dữ liệu Google Maps / dữ liệu cũ giữ cách hiển thị cũ để không làm mất dữ liệu đang có.
+  // Nếu backend đã lọc approved thì vẫn đúng; nếu dữ liệu cũ thiếu status thì vẫn hiện.
+  return true;
 }
 
 function sentimentStats(reviews) {
@@ -1106,6 +1283,7 @@ export default function ServiceOperatorReviewsPage() {
       const allReviews = [...localReviews, ...remoteReviews]
         .filter((item, index, list) => list.findIndex(other => String(other.id) === String(item.id)) === index)
         .filter(review => reviewMatchesService(review, serviceMeta) && reviewMatchesOperator(review, safeOperator))
+        .filter(isApprovedVisibleReview)
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
       setOperator(safeOperator);
@@ -1174,6 +1352,25 @@ export default function ServiceOperatorReviewsPage() {
     const start = (safePage - 1) * REVIEWS_PER_PAGE;
     return filteredReviews.slice(start, start + REVIEWS_PER_PAGE);
   }, [filteredReviews, safePage]);
+
+  const reviewOldestIndexById = useMemo(() => {
+    const oldestFirst = [...reviews].sort((a, b) => {
+      const timeA = new Date(a.createdAt || 0).getTime();
+      const timeB = new Date(b.createdAt || 0).getTime();
+
+      if (timeA !== timeB) return timeA - timeB;
+
+      return String(a.id || '').localeCompare(String(b.id || ''));
+    });
+
+    const map = new Map();
+
+    oldestFirst.forEach((review, index) => {
+      map.set(String(review.id), index + 1);
+    });
+
+    return map;
+  }, [reviews]);
 
   const pageNumbers = useMemo(() => {
     const start = Math.max(1, safePage - 2);
@@ -1317,8 +1514,14 @@ export default function ServiceOperatorReviewsPage() {
       visibility: 'public',
       moderationStatus: 'pending_review',
       status: 'pending_review',
-      sourceSystem: 'partner-web',
-      source: 'partner-web',
+      sourceSystem: 'public-web',
+      source: 'public-web',
+      dataScope: 'shared',
+      data_scope: 'shared',
+      reviewScope: 'public-shared',
+      review_scope: 'public-shared',
+      submitChannel: 'public-page',
+      submit_channel: 'public-page',
       createdAt: new Date().toISOString(),
       created_at: new Date().toISOString(),
     };
@@ -1347,90 +1550,27 @@ export default function ServiceOperatorReviewsPage() {
         }
       }
 
-      const normalized = normalizeReview(
-        {
-          ...payload,
-          ...(saved || {}),
-          id: finalId,
-          reviewId: finalId,
-          review_id: finalId,
-          imageUrl: uploadedImage?.uploadOk ? uploadedImage.imageUrl : '',
-          reviewImage: uploadedImage?.uploadOk ? uploadedImage.imageUrl : '',
-          imageFileName: uploadedImage?.imageFileName || '',
-          localImagePreviewUrl: reviewImagePreview || '',
-          hasImage: Boolean(uploadedImage?.uploadOk || reviewImagePreview),
-        },
-        0,
-        serviceMeta,
-      );
-
-      writeLocalReview(normalized, serviceMeta.slug);
-      setReviews(prev => [normalized, ...prev.filter(item => String(item.id) !== String(normalized.id))]);
       setForm({ reviewerName: '', rating: '5', comment: '' });
       setReviewImageFile(null);
       setReviewImagePreview('');
       setSubmitState(uploadWarning ? 'warning' : 'success');
       setMessage(
         uploadWarning
-          ? `Đã gửi đánh giá và hiển thị ngay, nhưng ảnh chưa lưu được vào server: ${uploadWarning}`
+          ? `Đã gửi đánh giá vào hàng chờ admin, nhưng ảnh chưa lưu được vào server: ${uploadWarning}`
           : reviewImageFile
-            ? `Đã gửi đánh giá kèm ảnh. Ảnh đã lưu tên ${uploadedImage?.imageFileName || ''}.`
-            : `Đã gửi đánh giá. Đánh giá này đã hiện ở trang ${serviceMeta.itemLabel} và được gửi vào hệ thống để Partner quản lý.`
+            ? `Đã gửi đánh giá kèm ảnh ${uploadedImage?.imageFileName || ''}. Admin sẽ kiểm duyệt trước khi hiển thị.`
+            : 'Đã gửi đánh giá. Nội dung sẽ được admin kiểm duyệt trước khi hiển thị công khai.'
       );
       setActiveTab('reviews');
       setReviewPage(1);
-    } catch (_err) {
-      const localId = fallbackReviewId;
-      let uploadedImage = null;
-      let uploadWarning = '';
-
-      if (reviewImageFile) {
-        try {
-          uploadedImage = await uploadPublicReviewImage({
-            reviewId: localId,
-            operatorCode: operator.code,
-            serviceSlug: serviceMeta.slug,
-            file: reviewImageFile,
-          });
-        } catch (uploadError) {
-          uploadWarning = uploadError?.message || 'Upload ảnh chưa thành công.';
-          uploadedImage = {
-            ...(uploadError?.uploadMeta || {}),
-            uploadOk: false,
-          };
-        }
-      }
-
-      const localOnly = normalizeReview(
-        {
-          ...payload,
-          id: localId,
-          reviewId: localId,
-          review_id: localId,
-          localOnly: true,
-          imageUrl: uploadedImage?.uploadOk ? uploadedImage.imageUrl : '',
-          reviewImage: uploadedImage?.uploadOk ? uploadedImage.imageUrl : '',
-          imageFileName: uploadedImage?.imageFileName || '',
-          localImagePreviewUrl: reviewImagePreview || '',
-          hasImage: Boolean(uploadedImage?.uploadOk || reviewImagePreview),
-        },
-        0,
-        serviceMeta,
-      );
-
-      writeLocalReview(localOnly, serviceMeta.slug);
-      setReviews(prev => [localOnly, ...prev.filter(item => String(item.id) !== String(localOnly.id))]);
-      setForm({ reviewerName: '', rating: '5', comment: '' });
-      setReviewImageFile(null);
-      setReviewImagePreview('');
+    } catch (err) {
       setSubmitState('warning');
       setMessage(
-        uploadWarning
-          ? `Backend chưa nhận review, đánh giá đã lưu tạm. Ảnh chưa lưu server: ${uploadWarning}`
-          : 'Backend chưa nhận được review, nhưng đánh giá đã được lưu tạm và hiển thị ngay. Kiểm tra API POST /api/reviews nếu muốn đồng bộ server.'
+        err?.response?.data?.message ||
+        err?.response?.data?.detail ||
+        err?.message ||
+        'Chưa gửi được đánh giá lên hệ thống. Vui lòng kiểm tra API /api/reviews.'
       );
-      setActiveTab('reviews');
-      setReviewPage(1);
     }
   }
 
@@ -1565,7 +1705,7 @@ export default function ServiceOperatorReviewsPage() {
           <div className={styles.writeIntroIcon}><PremiumIcon name="review" /></div>
           <div>
             <h2 className={styles.sectionTitle}>Viết bài đánh giá</h2>
-            <p className={styles.sectionDescription}>Chia sẻ trải nghiệm thực tế của bạn. Đánh giá sẽ hiển thị ngay trên trang này và đồng bộ về hệ thống khi API sẵn sàng.</p>
+            <p className={styles.sectionDescription}>Chia sẻ trải nghiệm thực tế của bạn. Đánh giá sẽ được gửi vào hàng chờ admin và chỉ hiển thị sau khi được duyệt.</p>
           </div>
         </div>
 
@@ -1846,6 +1986,7 @@ export default function ServiceOperatorReviewsPage() {
                       const status = statusInfo(review);
                       const dateInfo = formatDateParts(review.createdAt);
                       const imageBase = (safePage - 1) * REVIEWS_PER_PAGE + index;
+                      const imageSequenceIndex = reviewOldestIndexById.get(String(review.id)) || (imageBase + 1);
                       const interaction = getReviewInteraction(review.id, index);
                       return (
                         <article key={review.id} className={styles.reviewCard}>
@@ -1866,51 +2007,12 @@ export default function ServiceOperatorReviewsPage() {
                               </div>
                               <p className={styles.reviewText}>{review.comment}</p>
 
-                              {(() => {
-                                const explicitImages = getExplicitReviewImages(review);
-
-                                if (explicitImages.length) {
-                                  return (
-                                    <div className={styles.reviewGallery}>
-                                      {explicitImages.slice(0, 3).map((image, photoIndex) => (
-                                        <img
-                                          key={`${image}-${photoIndex}`}
-                                          className={styles.reviewThumb}
-                                          src={image}
-                                          alt={`Ảnh đánh giá ${photoIndex + 1}`}
-                                          onError={(event) => {
-                                            event.currentTarget.style.display = 'none';
-                                          }}
-                                        />
-                                      ))}
-                                      {explicitImages.length > 3 && <div className={styles.moreThumb}>+{explicitImages.length - 3}<span>Xem thêm</span></div>}
-                                    </div>
-                                  );
-                                }
-
-                                return (
-                                  <div className={styles.reviewGallery}>
-                                    {[0, 1, 2].map(photoIndex => (
-                                      <img
-                                        key={photoIndex}
-                                        className={styles.reviewThumb}
-                                        src={localOperatorImage(imageBase + photoIndex, serviceMeta.slug, operator?.code, photoIndex + 3)}
-                                        alt={`Ảnh đánh giá ${photoIndex + 1}`}
-                                        onError={(event) => {
-                                          const alt = localOperatorImageAlt(imageBase + photoIndex, serviceMeta.slug, operator?.code, photoIndex + 3);
-                                          if (!event.currentTarget.dataset.triedAlt && alt) {
-                                            event.currentTarget.dataset.triedAlt = '1';
-                                            event.currentTarget.src = alt;
-                                            return;
-                                          }
-                                          event.currentTarget.style.display = 'none';
-                                        }}
-                                      />
-                                    ))}
-                                    <div className={styles.moreThumb}>+3<span>Xem thêm</span></div>
-                                  </div>
-                                );
-                              })()}
+                              <ReviewImageGallery
+                                review={review}
+                                operator={operator}
+                                serviceMeta={serviceMeta}
+                                sequentialIndex={imageSequenceIndex}
+                              />
 
                               <div className={styles.reviewFooter}>
                                 <button

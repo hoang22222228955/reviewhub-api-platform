@@ -57,13 +57,18 @@ Invoke-RestMethod `
   -Body '{"message":"hello"}'
   
 
-- admin@reviewhub.vn / 123456
+- admin@reviewhub.vn/123456
 - partner@reviewhub.vn / 123456
 - futa@reviewhub.vn / 123456
-- anvui@reviewhub.vn / 123456
+- anvui@reviewhub.vn/123456
 phuongtrang@reviewhub.vn/ 123456
 thanhbuoi@reviewhub.vn/ 123456
 hungcuong@reviewhub.vn/ 123456
+
+PT-011', name: 'Xe Hạnh
+xehanh@reviewhub.vn/123456
+
+xehanh1@reviewhub.vn/123456
 Xe Minh Quân
 minhquan@reviewhub.vn/ 123456
 
@@ -74,9 +79,11 @@ Kumho Samco
 kumhosamco@reviewhub.vn/ 123456
 
 'PT-013', name: 'Sao Việt
-saoviet@reviewhub.vn/ 123456
+saoviet@reviewhub.vn/123456
 chạy backend:
 
+code: 'PT-015', name: 'Thuận Thảo
+thuanthao@reviewhub.vn/123456
 
 'PT-009', name: 'Cúc Tùng'
 cuctung@reviewhub.vn/ 123456
@@ -84,18 +91,8 @@ cuctung@reviewhub.vn/ 123456
 PT-040', name: 'Như Vinh'
 nhuvinh@reviewhub.vn/ 123456
 
-{ code: 'KS-001', name: 'Mường Thanh Luxury Đà Nẵng', region: 'Đà Nẵng', type: 'Khách sạn 5 sao', hotline: '1900 1833', website: 'muongthanh.com', description: 'Khách sạn cao cấp tại Đà Nẵng, phù hợp nghỉ dưỡng, công tác và du lịch gia đình.' },
-  { code: 'KS-002', name: 'Vinpearl Resort Nha Trang', region: 'Nha Trang', type: 'Resort / Khách sạn nghỉ dưỡng', hotline: '1900 6677', website: 'vinpearl.com', description: 'Khu nghỉ dưỡng cao cấp tại Nha Trang với nhiều tiện ích, phù hợp gia đình và khách du lịch.' },
-  { code: 'KS-003', name: 'FLC Grand Hotel Hạ Long', region: 'Hạ Long', type: 'Khách sạn nghỉ dưỡng', hotline: '1900 5454', website: 'flchotelsresorts.com', description: 'Khách sạn nghỉ dưỡng view biển, phù hợp hội nghị, du lịch gia đình và nghỉ dưỡng cuối tuần.' },
-  { code: 'KS-004', name: 'InterContinental Hanoi Westlake', region: 'Hà Nội', type: 'Khách sạn 5 sao', hotline: '024 6270 8888', website: 'ihg.com', description: 'Khách sạn cao cấp tại khu vực Hồ Tây, nổi bật với không gian sang trọng và dịch vụ chuyên nghiệp.' },
-  { code: 'KS-005', name: 'Hotel Nikko Saigon', region: 'TP. Hồ Chí Minh', type: 'Khách sạn 5 sao', hotline: '028 3925 7777', website: 'hotelnikkosaigon.com.vn', description: 'Khách sạn trung tâm TP. Hồ Chí Minh, phù hợp công tác, du lịch và hội nghị.' },
-  { code: 'KS-006', name: 'Saigon Morin Hotel Huế', region: 'Huế', type: 'Khách sạn di sản', hotline: '0234 3823 526', website: 'morinhotel.com.vn', description: 'Khách sạn lâu đời tại Huế, nổi bật với kiến trúc cổ điển và vị trí thuận tiện.' },
-  { code: 'KS-007', name: 'Pullman Danang Beach Resort', region: 'Đà Nẵng', type: 'Resort biển', hotline: '0236 395 8888', website: 'pullman-danang.com', description: 'Resort biển cao cấp, phù hợp nghỉ dưỡng gia đình, cặp đôi và khách quốc tế.' },
-  { code: 'KS-008', name: 'Lotte Hotel Saigon', region: 'TP. Hồ Chí Minh', type: 'Khách sạn 5 sao', hotline: '028 3823 3333', website: 'lottehotel.com', description: 'Khách sạn trung tâm thành phố, nổi bật với dịch vụ chuyên nghiệp và vị trí thuận tiện.' },
-  { code: 'KS-009', name: 'Sapa Jade Hill Resort', region: 'Sa Pa', type: 'Resort nghỉ dưỡng', hotline: '0214 3888 888', website: 'sapajadehill.com', description: 'Khu nghỉ dưỡng tại Sa Pa, phù hợp du lịch thiên nhiên, nghỉ dưỡng và trải nghiệm văn hóa.' },
-  { code: 'KS-010', name: 'Dalat Palace Heritage Hotel', region: 'Đà Lạt', type: 'Khách sạn di sản', hotline: '0263 3825 444', website: 'dalatpalace.vn', description: 'Khách sạn phong cách cổ điển tại Đà Lạt, nổi bật với không gian sang trọng và lịch sử lâu đời.' },
-  { code: 'KS-011', name: 'Novotel Phu Quoc Resort', region: 'Phú Quốc', type: 'Resort biển', hotline: '0297 6260 999', website: 'novotelphuquoc.com', description: 'Resort biển tại Phú Quốc, phù hợp nghỉ dưỡng gia đình và du lịch dài ngày.' },
-  { code: 'KS-012', name: 'Melia Ba Vi Mountain Retreat', region: 'Ba Vì', type: 'Resort núi', hotline: '024 3200 9999', website: 'melia.com', description: 'Khu nghỉ dưỡng trên núi, phù hợp nghỉ dưỡng cuối tuần, thiên nhiên và trải nghiệm yên tĩnh.' },
+Hùng Cường
+hc@reviewhub.vn/123456
   
 code: 'KS-001', name: 'Mường Thanh Luxury Đà Nẵng',
 muongthanh@reviewhub.vn/ 123456
@@ -107,7 +104,65 @@ code: 'KS-003', name: 'FLC Grand Hotel Hạ Long'
 halong@reviewhub.vn/ 123456
 
 code: 'KS-004', name: 'InterContinental Hanoi Westlake
-hoangtran@reviewhub.vn/ 123456
+hoangtran@reviewhub.vn/123456
+
+code: 'KS-010', name: 'Dalat Palace Heritage Hotel
+
+dalat@reviewhub.vn/123456
+
+hoangminh@reviewhub.vn/123456
+
+{ code: 'KS-013', name: 'Sofitel Legend Metropole Hanoi', region: 'Hà Nội', type: 'Khách sạn 5 sao / Khách sạn di sản', hotline: 'Đang cập nhật', website: 'sofitel-legend-metropole-hanoi.com', description: 'Khách sạn di sản nổi tiếng tại trung tâm Hà Nội, phong cách cổ điển sang trọng, phù hợp khách nghỉ dưỡng cao cấp, công tác và du lịch văn hóa.' },
+  { code: 'KS-014', name: 'JW Marriott Hotel Hanoi', region: 'Hà Nội', type: 'Khách sạn 5 sao', hotline: 'Đang cập nhật', website: 'marriott.com', description: 'Khách sạn 5 sao cao cấp tại Hà Nội, nổi bật với không gian hiện đại, dịch vụ chuyên nghiệp, phù hợp hội nghị, công tác và nghỉ dưỡng.' },
+  { code: 'KS-015', name: 'Sheraton Saigon Grand Opera Hotel', region: 'TP. Hồ Chí Minh', type: 'Khách sạn 5 sao', hotline: 'Đang cập nhật', website: 'marriott.com', description: 'Khách sạn 5 sao tại trung tâm Quận 1, gần Nhà hát Thành phố, phù hợp khách công tác, du lịch cao cấp và khách quốc tế.' },
+  { code: 'KS-016', name: 'InterContinental Danang Sun Peninsula Resort', region: 'Đà Nẵng', type: 'Resort biển 5 sao', hotline: 'Đang cập nhật', website: 'ihg.com', description: 'Resort biển cao cấp tại bán đảo Sơn Trà, nổi bật với kiến trúc độc đáo, không gian nghỉ dưỡng sang trọng và dịch vụ quốc tế.' },
+  { code: 'KS-017', name: 'Meliá Hanoi', region: 'Hà Nội', type: 'Khách sạn 5 sao', hotline: 'Đang cập nhật', website: 'melia.com', description: 'Khách sạn 5 sao tại trung tâm Hà Nội, vị trí thuận tiện, phù hợp khách công tác, hội nghị và du lịch thành phố.' },
+  { code: 'KS-018', name: 'Caravelle Saigon', region: 'TP. Hồ Chí Minh', type: 'Khách sạn 5 sao', hotline: 'Đang cập nhật', website: 'caravellehotel.com', description: 'Khách sạn lâu đời tại trung tâm Sài Gòn, gần Nhà hát Thành phố, nổi bật với vị trí đẹp, dịch vụ chuyên nghiệp và phong cách sang trọng.' },
+  { code: 'KS-019', name: 'New World Saigon Hotel', region: 'TP. Hồ Chí Minh', type: 'Khách sạn 5 sao', hotline: 'Đang cập nhật', website: 'newworldhotels.com', description: 'Khách sạn 5 sao tại trung tâm TP. Hồ Chí Minh, gần chợ Bến Thành và các điểm du lịch, phù hợp công tác, sự kiện và nghỉ dưỡng.' },
+  { code: 'KS-020', name: 'Pan Pacific Hanoi
+saigonmorin@reviewhub.vn/123456
+
+admin@reviewhub.vn / 123456
+
+hoang01@reviewhub.vn/123456
+hoang02@reviewhub.vn/123456
+hoang03@reviewhub.vn/123456
+hoang04@reviewhub.vn/123456
+hoang05@reviewhub.vn/123456
+hoang06@reviewhub.vn/123456 gói tự chọn
+hoang07@reviewhub.vn/123456
+
+hoang08@reviewhub.vn/123456
+
+hoang09@reviewhub.vn/123456 3 gói
+
+hoang10@reviewhub.vn/123456
+
+
+
+hoang11@reviewhub.vn/123456
+
+hoang12@reviewhub.vn/123456
+
+hoang13@reviewhub.vn/123456
+
+hoang14@reviewhub.vn/123456
+
+hoang15@reviewhub.vn/123456
+
+hoang16@reviewhub.vn/123456
+
+
+hoang17@reviewhub.vn/123456
+
+hoang18@reviewhub.vn/123456
+
+hoang19@reviewhub.vn/123456
+
+MB-017', name: 'Japan Airlines', region: 'Nhật Bản / Quốc tế', type: 'Hãng hàng không quốc tế', hotline: '028 3827 9155', website: 'jal.co.jp', description: 'Hãng hàng không Nhật Bản, phù hợp tuyến Việt Nam - Nhật Bản và các hành trình quốc tế.' },
+  { code: 'MB-018', name: 'All Nippon Airways', region: 'Nhật Bản / Quốc tế', type: 'Hãng hàng không quốc tế', hotline: '028 3822 9612', website: 'ana.co.jp', description: 'Hãng bay Nhật Bản nổi bật về dịch vụ, đúng giờ và trải nghiệm bay quốc tế.' },
+  { code: 'MB-019', name: 'Turkish Airlines', region: 'Châu Âu / Quốc tế', type: 'Hãng hàng không quốc tế', hotline: '028 3827 8888', website: 'turkishairlines.com', description: 'Hãng bay quốc tế kết nối Việt Nam với châu Âu, Trung Đông và nhiều điểm đến toàn cầu.' },
+  { code: 'MB-020', name: 'Lufthans'a
 
 cd C:\Users\Admin\Downloads\reviewhub-api-platform-main\reviewhub-api-platform-main\backend\reviewhub
 $env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-17.0.19.10-hotspot"
@@ -125,3 +180,37 @@ npm run dev
 git add .
 git commit -m "Update code"
 git push
+
+
+
+
+
+
+
+SELECT 
+
+  operator_code,
+
+  target_code,
+
+  owner_partner_code,
+
+  moderation_status,
+
+  visibility,
+
+  source_system,
+
+  COUNT(*) AS total
+
+FROM reviews
+
+WHERE operator_code = 'KS-001' 
+
+   OR target_code = 'KS-001'
+
+   OR owner_partner_code = 'KS-001'
+
+GROUP BY operator_code, target_code, owner_partner_code, moderation_status, visibility, source_system
+
+ORDER BY total DESC;

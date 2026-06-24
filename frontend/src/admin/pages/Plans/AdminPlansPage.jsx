@@ -8,18 +8,24 @@ const PLAN_ORDER = ['starter', 'growth', 'enterprise'];
 const PLAN_META = {
   starter: {
     label: 'Khởi đầu',
-    tone: 'blue',
+    eyebrow: 'Gói cơ bản',
+    tone: 'green',
     note: 'Phù hợp partner mới bắt đầu triển khai',
+    accent: 'Starter',
   },
   growth: {
     label: 'Tăng trưởng',
-    tone: 'violet',
+    eyebrow: 'Phổ biến',
+    tone: 'amber',
     note: 'Gói cân bằng giữa quota và chi phí',
+    accent: 'Growth',
   },
   enterprise: {
     label: 'Doanh nghiệp',
-    tone: 'amber',
+    eyebrow: 'Nâng cao',
+    tone: 'blue',
     note: 'Dành cho hệ thống vận hành quy mô lớn',
+    accent: 'Enterprise',
   },
 };
 
@@ -33,18 +39,69 @@ function formatMoney(value) {
   return `${number.toLocaleString('vi-VN')} đ`;
 }
 
+function getPlanMeta(plan) {
+  return PLAN_META[plan?.id] || {
+    label: plan?.name || plan?.id || 'Gói tùy chỉnh',
+    eyebrow: 'Tùy chỉnh',
+    tone: 'purple',
+    note: 'Gói dịch vụ được cấu hình riêng',
+    accent: 'Custom',
+  };
+}
+
+function getPlanTitle(plan) {
+  return plan?.name || plan?.title || plan?.id || 'Gói dịch vụ';
+}
+
+function getActiveState(plan) {
+  const status = String(plan?.status || '').trim().toLowerCase();
+  const inactive = plan?.isActive === false || status === 'inactive' || status === 'ngừng bán' || status === 'tạm ngưng';
+
+  return {
+    active: !inactive,
+    label: inactive ? 'Đang tắt' : 'Đang bật',
+  };
+}
+
+function getPrivileges(plan) {
+  if (Array.isArray(plan?.privileges)) return plan.privileges;
+  if (Array.isArray(plan?.features)) return plan.features;
+  if (Array.isArray(plan?.benefits)) return plan.benefits;
+  return [];
+}
+
 export default function AdminPlansPage() {
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState(null);
   const [keyword, setKeyword] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [activePlanId, setActivePlanId] = useState(null);
 
   useEffect(() => {
     fetchPlans()
-      .then(setPlans)
+      .then(data => setPlans(Array.isArray(data) ? data : []))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (!activePlanId) return undefined;
+
+    document.body.classList.add(styles.modalOpenBody);
+
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') {
+        setActivePlanId(null);
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.body.classList.remove(styles.modalOpenBody);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [activePlanId]);
 
   async function handleSave(planId, payload) {
     setSavingId(planId);
@@ -59,6 +116,11 @@ export default function AdminPlansPage() {
     }
   }
 
+  function closeEditor() {
+    if (savingId === activePlanId) return;
+    setActivePlanId(null);
+  }
+
   const orderedPlans = useMemo(() => {
     const ordered = PLAN_ORDER.map(id => plans.find(p => p.id === id)).filter(Boolean);
     const rest = plans.filter(p => !PLAN_ORDER.includes(p.id));
@@ -69,15 +131,17 @@ export default function AdminPlansPage() {
     const q = keyword.trim().toLowerCase();
 
     return orderedPlans.filter(plan => {
-      const status = String(plan.status || plan.isActive || '').toLowerCase();
-      const activeText = plan.isActive === false || status === 'inactive' ? 'inactive' : 'active';
+      const { active } = getActiveState(plan);
+      const activeText = active ? 'active' : 'inactive';
+      const meta = getPlanMeta(plan);
 
       const matchKeyword = !q || [
         plan.id,
         plan.name,
         plan.title,
         plan.description,
-        PLAN_META[plan.id]?.label,
+        meta.label,
+        meta.eyebrow,
       ]
         .filter(Boolean)
         .some(value => String(value).toLowerCase().includes(q));
@@ -90,12 +154,20 @@ export default function AdminPlansPage() {
 
   const stats = useMemo(() => {
     const total = plans.length;
-    const active = plans.filter(p => p.isActive !== false && String(p.status || '').toLowerCase() !== 'inactive').length;
+    const active = plans.filter(p => getActiveState(p).active).length;
     const totalQuota = plans.reduce((sum, p) => sum + Number(p.quota || p.quotaTotal || 0), 0);
     const highestPrice = plans.reduce((max, p) => Math.max(max, Number(p.price || p.amount || 0)), 0);
 
     return { total, active, totalQuota, highestPrice };
   }, [plans]);
+
+  const activePlan = useMemo(
+    () => plans.find(plan => plan.id === activePlanId),
+    [plans, activePlanId]
+  );
+
+  const activePlanMeta = activePlan ? getPlanMeta(activePlan) : null;
+  const activePlanState = activePlan ? getActiveState(activePlan) : null;
 
   if (loading) {
     return (
@@ -117,14 +189,18 @@ export default function AdminPlansPage() {
           <span className={styles.consoleBadge}>ADMIN PACKAGE CENTER</span>
           <h1>Quản lý gói dịch vụ</h1>
           <p>
-            Tinh chỉnh giá, quota, trạng thái và nội dung hiển thị của từng gói trong một giao diện
-            gọn, sáng, hiện đại và dễ thao tác.
-          </p>
+             Thiết lập và quản lý các gói dịch vụ của ReviewHub, bao gồm giá bán, quota,
+             thời hạn sử dụng, trạng thái hoạt động và quyền lợi hiển thị cho đối tác.
+         </p>
         </div>
 
         <div className={styles.heroActions}>
-          <button className={styles.secondaryButton} type="button">Xem báo cáo</button>
-          <button className={styles.primaryButton} type="button">Đồng bộ gói</button>
+          <button className={styles.secondaryButton} type="button">
+            {filteredPlans.length} gói hiển thị
+          </button>
+          <button className={styles.primaryButton} type="button" onClick={() => setKeyword('')}>
+            Làm mới bộ lọc
+          </button>
         </div>
       </section>
 
@@ -155,7 +231,7 @@ export default function AdminPlansPage() {
         <div>
           <span className={styles.panelBadge}>PLAN CONFIGURATION</span>
           <h2>Danh sách gói</h2>
-          <p>Chỉnh sửa trực tiếp từng gói. Font nhỏ vừa phải, khoảng trắng thoáng và hiệu ứng nhẹ.</p>
+          <p>Chọn một gói để mở khung chỉnh sửa. Nút X trong khung chỉnh sửa chỉ đóng, không tự lưu thay đổi.</p>
         </div>
 
         <div className={styles.toolbar}>
@@ -189,41 +265,141 @@ export default function AdminPlansPage() {
         )}
 
         {filteredPlans.map(plan => {
-          const meta = PLAN_META[plan.id] || {
-            label: plan.name || plan.id,
-            tone: 'blue',
-            note: 'Gói dịch vụ tùy chỉnh',
-          };
+          const meta = getPlanMeta(plan);
+          const state = getActiveState(plan);
+          const price = Number(plan.price || plan.amount || 0);
+          const quota = Number(plan.quota || plan.quotaTotal || 0);
+          const privileges = getPrivileges(plan).slice(0, 3);
 
           return (
-            <div
+            <article
               key={plan.id}
-              className={`${styles.planShell} ${styles[`tone_${meta.tone}`] || styles.tone_blue}`}
+              className={`${styles.planCard} ${styles[`tone_${meta.tone}`] || styles.tone_green}`}
             >
-              <div className={styles.planTop}>
-                <div>
-                  <span className={styles.planLabel}>{meta.label}</span>
-                  <h3>{plan.name || plan.title || plan.id}</h3>
-                  <p>{meta.note}</p>
-                </div>
-                <span className={styles.planCode}>{plan.id}</span>
+              <div className={styles.planAccent}>{meta.accent}</div>
+
+              <div className={styles.cardBadgeRow}>
+                <span className={styles.tierBadge}>{meta.eyebrow}</span>
+                <span className={`${styles.stockBadge} ${state.active ? styles.statusOn : styles.statusOff}`}>
+                  {state.label}
+                </span>
               </div>
 
-              <PlanEditor
-                plan={plan}
-                onSave={(planId, payload) => handleSave(planId, payload)}
-              />
+              <div className={styles.planMain}>
+                <h3>{getPlanTitle(plan)}</h3>
+                <p>{plan.description || meta.note}</p>
+              </div>
 
-              {savingId === plan.id && (
-                <div className={styles.savingOverlay}>
-                  <span />
-                  Đang lưu thay đổi...
-                </div>
-              )}
-            </div>
+              <div className={styles.priceBlock}>
+                <span className={styles.priceMain}>{formatMoney(price)}</span>
+                <span className={styles.priceSub}>/{plan.cycle || 'tháng'} · {formatNumber(quota)} quota</span>
+              </div>
+
+              <div className={styles.planInfoGrid}>
+                <span>
+                  <small>Mã gói</small>
+                  <strong>{plan.id}</strong>
+                </span>
+                <span>
+                  <small>Thời hạn</small>
+                  <strong>{Number(plan.durationDays || 30)} ngày</strong>
+                </span>
+              </div>
+
+              <div className={styles.scopeBox}>
+                <strong>Điểm cấu hình</strong>
+                {privileges.length > 0 ? (
+                  privileges.map((item, index) => (
+                    <span key={`${plan.id}-${index}`}>
+                      <i>✓</i>
+                      {item}
+                    </span>
+                  ))
+                ) : (
+                  <span>
+                    <i>✓</i>
+                    Có thể chỉnh giá, quota, thời hạn và quyền lợi trong khung quản trị.
+                  </span>
+                )}
+              </div>
+
+              <button
+                type="button"
+                className={styles.editButton}
+                onClick={() => setActivePlanId(plan.id)}
+              >
+                Chỉnh gói này
+                <span>→</span>
+              </button>
+            </article>
           );
         })}
       </div>
+
+      {activePlan && activePlanMeta && activePlanState && (
+        <div className={styles.modalOverlay} role="presentation">
+          <section
+            className={`${styles.modalPanel} ${styles[`tone_${activePlanMeta.tone}`] || styles.tone_green}`}
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Chỉnh gói ${getPlanTitle(activePlan)}`}
+          >
+            <header className={styles.modalHeader}>
+              <div>
+                <span className={styles.modalBadge}>{activePlanMeta.eyebrow}</span>
+                <h2>{getPlanTitle(activePlan)}</h2>
+                <p>
+                  Nút X chỉ đóng khung chỉnh sửa và không tự lưu. Muốn lưu thay đổi, hãy bấm nút lưu trong form bên dưới.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className={styles.modalClose}
+                onClick={closeEditor}
+                aria-label="Đóng khung chỉnh sửa gói"
+                title="Đóng - không lưu thay đổi"
+                disabled={savingId === activePlan.id}
+              >
+                ×
+              </button>
+            </header>
+
+            <div className={styles.modalSummary}>
+              <span>
+                <small>Trạng thái</small>
+                <strong>{activePlanState.label}</strong>
+              </span>
+              <span>
+                <small>Giá hiện tại</small>
+                <strong>{formatMoney(activePlan.price || activePlan.amount || 0)}</strong>
+              </span>
+              <span>
+                <small>Quota</small>
+                <strong>{formatNumber(activePlan.quota || activePlan.quotaTotal || 0)}</strong>
+              </span>
+              <span>
+                <small>Mã gói</small>
+                <strong>{activePlan.id}</strong>
+              </span>
+            </div>
+
+            <div className={styles.editorSurface}>
+              <PlanEditor
+                plan={activePlan}
+                onSave={(planId, payload) => handleSave(planId, payload)}
+              />
+            </div>
+
+            {savingId === activePlan.id && (
+              <div className={styles.savingOverlay}>
+                <span />
+                Đang lưu thay đổi...
+              </div>
+            )}
+          </section>
+        </div>
+      )}
     </div>
   );
 }

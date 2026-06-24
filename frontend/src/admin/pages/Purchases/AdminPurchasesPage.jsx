@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import Card from '../../../shared/ui/Card/Card'
-import Badge from '../../../shared/ui/Badge/Badge'
 import api from '../../../services/api'
+import { fetchServiceCatalog } from '../../../services/operatorService'
 import { formatCurrency } from '../../../shared/lib/format'
 import styles from './AdminPurchasesPage.module.css'
 
 const ITEMS_PER_PAGE = 15
-const PLAN_TONE = { starter: 'neutral', growth: 'success', enterprise: 'warning' }
 
 function formatDate(isoStr) {
   if (!isoStr) return '—'
@@ -43,6 +42,30 @@ function firstLetter(name) {
   return String(name || 'P').trim().charAt(0).toUpperCase()
 }
 
+function cleanToken(value) {
+  const text = String(value || '').trim()
+  const lower = text.toLowerCase()
+  if (!text || text === '—' || text === '-' || lower === 'null' || lower === 'undefined' || lower === 'nan') return ''
+  return text
+}
+
+function planPillClass(styles, planId, customLevel) {
+  const value = String(customLevel || planId || '').toLowerCase()
+  if (value === 'enterprise') return styles.planEnterprise
+  if (value === 'growth') return styles.planGrowth
+  if (value === 'starter') return styles.planStarter
+  if (value === 'custom') return styles.planCustom
+  return styles.planNeutral
+}
+
+function statusPillClass(styles, status) {
+  const tone = statusTone(status)
+  if (tone === 'success') return styles.statusPaid
+  if (tone === 'warning') return styles.statusPending
+  if (tone === 'danger') return styles.statusRejected
+  return styles.statusNeutral
+}
+
 export default function AdminPurchasesPage() {
   const [purchases, setPurchases] = useState([])
   const [loading, setLoading] = useState(true)
@@ -50,11 +73,30 @@ export default function AdminPurchasesPage() {
   const [keyword, setKeyword] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [page, setPage] = useState(1)
+  const [serviceItems, setServiceItems] = useState([])
 
   const fetchPurchases = () => {
     setLoading(true)
-    api.get('/api/admin/purchases')
-      .then(r => setPurchases(r.data || []))
+
+    Promise.allSettled([
+      api.get('/api/admin/purchases'),
+      fetchServiceCatalog(),
+    ])
+      .then(([purchaseResult, serviceResult]) => {
+        if (purchaseResult.status === 'fulfilled') {
+          setPurchases(purchaseResult.value.data || [])
+        } else {
+          setPurchases([])
+          console.error('Không tải được danh sách mua gói:', purchaseResult.reason)
+        }
+
+        if (serviceResult.status === 'fulfilled') {
+          setServiceItems(Array.isArray(serviceResult.value) ? serviceResult.value : [])
+        } else {
+          setServiceItems([])
+          console.warn('Không tải được danh sách dịch vụ để map tên đơn vị:', serviceResult.reason)
+        }
+      })
       .finally(() => setLoading(false))
   }
 
@@ -102,11 +144,108 @@ export default function AdminPurchasesPage() {
     return { total, paid, pending, rejected, revenue }
   }, [purchases])
 
+
+  const serviceMap = useMemo(() => {
+    const map = new Map()
+
+    serviceItems.forEach(item => {
+      const codes = [
+        item.id,
+        item.code,
+        item.operatorCode,
+        item.operator_code,
+        item.serviceCode,
+        item.service_code,
+      ]
+
+      codes
+        .map(code => String(code || '').trim().toUpperCase())
+        .filter(Boolean)
+        .forEach(code => {
+          if (!map.has(code)) map.set(code, item)
+        })
+    })
+
+    return map
+  }, [serviceItems])
+
+  function splitCodes(value) {
+    if (Array.isArray(value)) {
+      return value
+        .flatMap(item => splitCodes(item))
+        .filter(Boolean)
+    }
+
+    return String(value || '')
+      .split(/[|,;]/)
+      .map(cleanToken)
+      .filter(Boolean)
+  }
+
+  function getPurchaseServiceCodes(p) {
+    const codes = [
+      p.selectedServiceCodes,
+      p.selectedServiceCode,
+      p.assignedOperatorCode,
+      p.operatorCode,
+      p.partnerCode,
+    ].flatMap(splitCodes)
+
+    return Array.from(new Set(codes))
+  }
+
+  function getServiceNameByCode(code) {
+    const item = serviceMap.get(String(code || '').trim().toUpperCase())
+
+    return (
+      item?.name ||
+      item?.operatorName ||
+      item?.operator_name ||
+      item?.serviceName ||
+      item?.service_name ||
+      ''
+    )
+  }
+
+  function getPurchaseServiceNames(p) {
+    const directNames = [
+      p.selectedServiceNames,
+      p.selectedServiceName,
+      p.serviceName,
+      p.operatorName,
+      p.assignedOperatorName,
+    ].flatMap(splitCodes)
+
+    const mappedNames = getPurchaseServiceCodes(p)
+      .map(code => getServiceNameByCode(code))
+      .filter(Boolean)
+
+    const names = [...directNames, ...mappedNames]
+      .map(name => String(name || '').trim())
+      .filter(Boolean)
+
+    return Array.from(new Set(names))
+  }
+
+  function getUnitName(p) {
+    return getPurchaseServiceNames(p)[0] || p.orgName || '—'
+  }
+
+  function getServiceCodeText(p) {
+    const codes = getPurchaseServiceCodes(p)
+    return codes.length ? codes.join(', ') : '—'
+  }
+
+  function getServiceMetaText(p) {
+    const text = getServiceCodeText(p)
+    return text !== '—' ? text : ''
+  }
+
   const filteredPurchases = useMemo(() => {
     const q = keyword.trim().toLowerCase()
 
     return purchases.filter(p => {
-      const text = [p.partnerName, p.partnerCode, p.orgName, p.planName, p.status]
+      const text = [p.partnerName, p.partnerCode, p.orgName, getUnitName(p), getServiceMetaText(p), p.planName, p.status, p.selectedServiceCode, p.selectedServiceCodes, p.selectedCategories]
         .map(v => String(v || '').toLowerCase())
         .join(' ')
 
@@ -118,7 +257,7 @@ export default function AdminPurchasesPage() {
 
       return matchesKeyword && matchesStatus
     })
-  }, [purchases, keyword, statusFilter])
+  }, [purchases, keyword, statusFilter, serviceMap])
 
   const totalPages = Math.max(1, Math.ceil(filteredPurchases.length / ITEMS_PER_PAGE))
   const currentPage = Math.min(page, totalPages)
@@ -189,7 +328,7 @@ export default function AdminPurchasesPage() {
             <input
               value={keyword}
               onChange={e => setKeyword(e.target.value)}
-              placeholder="Tìm partner, mã, đơn vị, gói..."
+              placeholder="Tìm partner, tên dịch vụ, mã, gói..."
             />
           </label>
 
@@ -213,6 +352,7 @@ export default function AdminPurchasesPage() {
                 <th>Partner</th>
                 <th>Đơn vị</th>
                 <th>Gói đã mua</th>
+                <th>Dịch vụ chọn</th>
                 <th>Số tiền</th>
                 <th>Trạng thái</th>
                 <th>Hành động</th>
@@ -221,7 +361,7 @@ export default function AdminPurchasesPage() {
             <tbody>
               {paginatedPurchases.length === 0 && (
                 <tr>
-                  <td colSpan={7} className={styles.emptyCell}>Không tìm thấy giao dịch phù hợp.</td>
+                  <td colSpan={8} className={styles.emptyCell}>Không tìm thấy giao dịch phù hợp.</td>
                 </tr>
               )}
 
@@ -237,10 +377,36 @@ export default function AdminPurchasesPage() {
                       </div>
                     </div>
                   </td>
-                  <td className={styles.orgCell}>{p.orgName || '—'}</td>
-                  <td><Badge tone={PLAN_TONE[p.planId] || 'neutral'}>{p.planName || '—'}</Badge></td>
+                  <td className={styles.orgCell}>
+                    <div className={styles.unitCell}>
+                      <strong>{getUnitName(p)}</strong>
+                      {getServiceMetaText(p) && (
+                        <small>{getServiceMetaText(p)}</small>
+                      )}
+                    </div>
+                  </td>
+                  <td>
+                    <span className={`${styles.planPill} ${planPillClass(styles, p.planId, p.customLevel)}`}>
+                      {p.planId === 'custom'
+                        ? `Tự chọn${p.customLevel ? ` - ${p.customLevel}` : ''}`
+                        : p.planName || '—'}
+                    </span>
+                  </td>
+                  <td>
+                    <div className={styles.serviceCell}>
+                      {getServiceCodeText(p) !== '—' ? (
+                        <span className={styles.serviceCodePill}>{getServiceCodeText(p)}</span>
+                      ) : (
+                        <span className={styles.softEmpty}>Chưa có</span>
+                      )}
+                    </div>
+                  </td>
                   <td className={styles.amountCell}>{formatCurrency(p.amount)}</td>
-                  <td><Badge tone={statusTone(p.status)}>{statusLabel(p.status)}</Badge></td>
+                  <td>
+                    <span className={`${styles.statusPill} ${statusPillClass(styles, p.status)}`}>
+                      {statusLabel(p.status)}
+                    </span>
+                  </td>
                   <td>
                     {p.status?.startsWith('pending') ? (
                       <div className={styles.actionGroup}>

@@ -53,6 +53,11 @@ try:
 except Exception:
     MAX_IMAGES = 200
 
+# Tuỳ chọn thứ 3 do run.bat truyền vào:
+# PT / KS / MB / TH / TO / DV
+# Dùng để giới hạn tìm đúng nhóm nhà xe/khách sạn/máy bay/tàu hỏa/tour/dịch vụ khác.
+SELECTED_PREFIX = sys.argv[3].upper().strip() if len(sys.argv) > 3 else ""
+
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 ROOT_DIR = SCRIPT_DIR.parent
@@ -72,6 +77,15 @@ CATEGORY_BY_PREFIX = {
     "TH": "tauhoa",
     "TO": "tour",
     "DV": "dichvukhac",
+}
+
+SERVICE_SEARCH_PREFIX_BY_CATEGORY = {
+    "PT": "Xe khách",
+    "KS": "Khách sạn",
+    "MB": "Hãng bay",
+    "TH": "Tàu hỏa",
+    "TO": "Tour",
+    "DV": "",
 }
 
 
@@ -149,6 +163,17 @@ def load_operators_from_seed():
 def find_operator(input_keyword):
     operators = load_operators_from_seed()
 
+    if SELECTED_PREFIX:
+        operators = [
+            op for op in operators
+            if str(op.get("operatorCode", "")).upper().startswith(f"{SELECTED_PREFIX}-")
+        ]
+
+        if not operators:
+            raise RuntimeError(
+                f"Không có dữ liệu nào trong seed-operators.js thuộc nhóm {SELECTED_PREFIX}."
+            )
+
     raw_keyword = str(input_keyword or "").strip()
     keyword = normalize_text(raw_keyword)
     clean_keyword = remove_service_words(raw_keyword)
@@ -156,6 +181,7 @@ def find_operator(input_keyword):
     print("DEBUG FIND OPERATOR")
     print(f"Seed file     : {SEED_OPERATORS_FILE}")
     print(f"Input keyword : {raw_keyword}")
+    print(f"Selected group: {SELECTED_PREFIX or 'ALL'}")
     print(f"Clean keyword : {clean_keyword}")
 
     # 1. Nhập mã PT-001 / KS-001 thì match mã trước.
@@ -238,10 +264,14 @@ def category_slug_from_code(operator_code):
 def make_google_maps_search_text(operator):
     operator_code = operator["operatorCode"]
     operator_name = operator["operatorName"]
-    category_slug = category_slug_from_code(operator_code)
+    prefix = str(operator_code or "").split("-")[0].upper()
+    service_prefix = SERVICE_SEARCH_PREFIX_BY_CATEGORY.get(prefix, "")
 
-    if category_slug == "nhaxe":
-        return f"Xe khách {operator_name}"
+    # Đoạn HTML ảnh review của khách sạn vẫn dùng button.Tya61d + background-image
+    # giống nhà xe, nên phần lấy ảnh không cần sửa.
+    # Chỉ khác phần search Google Maps: thêm tiền tố đúng loại dịch vụ để tìm chính xác hơn.
+    if service_prefix:
+        return f"{service_prefix} {operator_name}"
 
     return operator_name
 

@@ -8,6 +8,365 @@ function nowTime() {
 
 const PAGE_SIZE = 12;
 
+function normalizeSource(value) {
+  const source = String(value || '').trim().toLowerCase();
+  if (source === 'google' || source === 'google_maps' || source === 'google-maps') return 'google-maps';
+  if (source === 'partner' || source === 'partner_web' || source === 'partner-web') return 'partner-web';
+  if (['public', 'public_web', 'public-web', 'user-web', 'user_web', 'community', 'community-web', 'customer-web', 'customer'].includes(source)) return 'public-web';
+  return source || 'unknown';
+}
+
+function getSourceLabel(value) {
+  const source = normalizeSource(value);
+  if (source === 'google-maps') return 'Google Maps';
+  if (source === 'partner-web') return 'Partner gửi';
+  if (source === 'public-web') return 'Người dùng public';
+  return 'Nguồn khác';
+}
+
+function getSourceBadgeClass(styles, value) {
+  const source = normalizeSource(value);
+  if (source === 'google-maps') return styles.sourceGoogle;
+  if (source === 'partner-web') return styles.sourcePartner;
+  if (source === 'public-web') return styles.sourcePublic;
+  return styles.sourceOther;
+}
+
+function isPartnerPrivateReview(item) {
+  return normalizeSource(item?.sourceSystem || item?.source) === 'partner-web';
+}
+
+function isPublicSharedReview(item) {
+  const source = normalizeSource(item?.sourceSystem || item?.source);
+  return source === 'google-maps' || source === 'public-web';
+}
+
+function isEmailLike(value) {
+  return /[^\s@]+@[^\s@]+\.[^\s@]+/.test(String(value || '').trim());
+}
+
+function sameText(a, b) {
+  return String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+}
+
+function normalizeLookupKey(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function buildPartnerAccountLookup(partners = []) {
+  const lookup = new Map();
+
+  const push = (key, account) => {
+    const normalized = normalizeLookupKey(key);
+    if (!normalized || lookup.has(normalized)) return;
+    lookup.set(normalized, account);
+  };
+
+  partners.forEach(partner => {
+    const accountName = String(
+      partner?.name ||
+      partner?.fullName ||
+      partner?.full_name ||
+      partner?.displayName ||
+      partner?.display_name ||
+      ''
+    ).trim();
+
+    const accountEmail = String(
+      partner?.email ||
+      partner?.userEmail ||
+      partner?.user_email ||
+      partner?.accountEmail ||
+      partner?.account_email ||
+      ''
+    ).trim();
+
+    const account = {
+      ...partner,
+      accountName,
+      accountEmail,
+      accountId: String(partner?.id || partner?.userId || partner?.user_id || '').trim(),
+    };
+
+    [
+      partner?.id,
+      partner?.userId,
+      partner?.user_id,
+      partner?.accountId,
+      partner?.account_id,
+      partner?.email,
+      partner?.userEmail,
+      partner?.user_email,
+      partner?.accountEmail,
+      partner?.account_email,
+    ].forEach(key => push(key, account));
+  });
+
+  return lookup;
+}
+
+function getPartnerOwnerKey(item) {
+  return getFirstValue(item, [
+    'ownerPartnerCode',
+    'owner_partner_code',
+    'partnerUserId',
+    'partner_user_id',
+    'submittedBy',
+    'submitted_by',
+    'senderId',
+    'sender_id',
+    'accountId',
+    'account_id',
+    'userId',
+    'user_id',
+  ]);
+}
+
+function getPartnerSenderAccountInfo(item, partnerAccountLookup = new Map()) {
+  if (!isPartnerPrivateReview(item)) {
+    return { summary: '', name: '', email: '', ownerCode: '' };
+  }
+
+  const directEmail = getFirstValue(item, [
+    'partnerAccountEmail',
+    'partner_account_email',
+    'partnerEmail',
+    'partner_email',
+    'ownerPartnerEmail',
+    'owner_partner_email',
+    'submittedByEmail',
+    'submitted_by_email',
+    'senderEmail',
+    'sender_email',
+    'accountEmail',
+    'account_email',
+    'userEmail',
+    'user_email',
+    'registeredEmail',
+    'registered_email',
+    'loginEmail',
+    'login_email',
+  ]);
+
+  const rawName = getFirstValue(item, [
+    'partnerAccountName',
+    'partner_account_name',
+    'submittedByName',
+    'submitted_by_name',
+    'senderName',
+    'sender_name',
+    'accountName',
+    'account_name',
+    'userName',
+    'user_name',
+    'registeredName',
+    'registered_name',
+    'loginName',
+    'login_name',
+    'fullName',
+    'full_name',
+    'displayName',
+    'display_name',
+  ]);
+
+  const ownerCode = getPartnerOwnerKey(item);
+
+  const lookupKeys = [
+    ownerCode,
+    directEmail,
+    getFirstValue(item, ['partnerAccountId', 'partner_account_id', 'accountId', 'account_id', 'userId', 'user_id']),
+  ].filter(Boolean);
+
+  let matchedAccount = null;
+
+  for (const key of lookupKeys) {
+    const found = partnerAccountLookup.get(normalizeLookupKey(key));
+    if (found) {
+      matchedAccount = found;
+      break;
+    }
+  }
+
+  // Không dùng tên dịch vụ/nhà xe/khách sạn làm tên tài khoản gửi.
+  const serviceNames = [
+    item?.targetName,
+    item?.target_name,
+    item?.operatorName,
+    item?.operator_name,
+    item?.partnerName,
+    item?.partner_name,
+    item?.orgName,
+    item?.org_name,
+  ].filter(Boolean);
+
+  const safeRawName = rawName && !serviceNames.some(name => sameText(name, rawName))
+    ? rawName
+    : '';
+
+  const accountName = matchedAccount?.accountName || safeRawName || '';
+  const emailFromCode = isEmailLike(ownerCode) ? ownerCode : '';
+  const accountEmail = matchedAccount?.accountEmail || directEmail || emailFromCode || '';
+
+  let summary = '';
+  if (accountName && accountEmail) summary = `${accountName} · ${accountEmail}`;
+  else if (accountEmail) summary = accountEmail;
+  else if (accountName) summary = accountName;
+  else if (ownerCode) summary = `Mã tài khoản: ${ownerCode}`;
+  else summary = 'Chưa có tên / gmail tài khoản gửi';
+
+  return {
+    summary,
+    name: accountName,
+    email: accountEmail,
+    ownerCode,
+  };
+}
+
+function getPartnerSenderAccount(item, partnerAccountLookup = new Map()) {
+  return getPartnerSenderAccountInfo(item, partnerAccountLookup).summary;
+}
+
+function getPartnerSenderMeta(item, partnerAccountLookup = new Map()) {
+  const info = getPartnerSenderAccountInfo(item, partnerAccountLookup);
+  const summary = String(info.summary || '').trim();
+
+  let title = info.name || '';
+  let subtitle = info.email || '';
+
+  if (!title && summary.includes(' · ')) {
+    const parts = summary.split(' · ');
+    title = parts[0]?.trim() || '';
+    subtitle = parts.slice(1).join(' · ').trim();
+  }
+
+  if (!title && info.email) title = info.email;
+  if (!subtitle && info.ownerCode && !isEmailLike(info.ownerCode)) subtitle = `Mã tài khoản: ${info.ownerCode}`;
+  if (!title && info.ownerCode) title = 'Tài khoản partner';
+  if (!title && summary) title = summary;
+  if (!subtitle && title && title !== summary && summary) subtitle = summary;
+  if (!subtitle && title && !title.startsWith('Mã tài khoản:')) subtitle = 'Review riêng của tài khoản này';
+
+  return {
+    title: title || 'Chưa có tên tài khoản',
+    subtitle: subtitle || 'Chưa có gmail tài khoản gửi',
+    initial: getInitial(title || subtitle || 'P'),
+  };
+}
+
+function PartnerSenderHighlight({ item, partnerAccountLookup = new Map(), compact = false }) {
+  const meta = getPartnerSenderMeta(item, partnerAccountLookup);
+
+  return (
+    <div className={`${styles.partnerSenderBox} ${compact ? styles.partnerSenderBoxCompact : ''}`}>
+      <div className={styles.partnerSenderBody}>
+        <div className={styles.partnerSenderContent}>
+          <strong>{meta.title}</strong>
+          <span>{meta.subtitle}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+function getRawPayload(item) {
+  const raw = item?.rawPayload || item?.raw_payload || item?.payload || item?.meta || item?.metadata || null;
+  if (!raw) return {};
+  if (typeof raw === 'string') {
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return {};
+    }
+  }
+  return typeof raw === 'object' ? raw : {};
+}
+
+function getFirstValue(item, keys) {
+  const raw = getRawPayload(item);
+
+  for (const key of keys) {
+    const direct = item?.[key];
+    if (direct !== undefined && direct !== null && String(direct).trim()) return String(direct).trim();
+
+    const rawValue = raw?.[key];
+    if (rawValue !== undefined && rawValue !== null && String(rawValue).trim()) return String(rawValue).trim();
+  }
+
+  return '';
+}
+
+function normalizeCode(value) {
+  return String(value || '').trim().toUpperCase();
+}
+
+function getCategoryFolder(item) {
+  const explicit = getFirstValue(item, ['categoryFolder', 'category_folder', 'imageCategoryFolder']);
+  if (explicit) return explicit;
+
+  const category = String(item?.category || item?.serviceCategory || '').toLowerCase();
+  if (category.includes('khách') || category.includes('khach')) return 'khachsan';
+  if (category.includes('máy') || category.includes('may')) return 'maybay';
+  if (category.includes('tàu') || category.includes('tau')) return 'tauhoa';
+  if (category.includes('tour')) return 'tour';
+  if (category.includes('dịch') || category.includes('dich')) return 'dichvukhac';
+  return 'nhaxe';
+}
+
+function getImageOperatorCode(item) {
+  const candidates = [
+    getFirstValue(item, ['operatorCodeForImage', 'imageOperatorCode']),
+    item?.operatorCode,
+    item?.operator_code,
+    item?.targetCode,
+    item?.target_code,
+    item?.partnerCode,
+    item?.partner_code,
+  ].map(normalizeCode).filter(Boolean);
+
+  for (const code of candidates) {
+    if (/^(PT|KS|MB|TH|TO|DV)-\d{3}$/.test(code)) return code;
+    const hotel = code.match(/^HOTEL-(\d{3})-/);
+    if (hotel) return `KS-${hotel[1]}`;
+    const bus = code.match(/^BUS-(\d{3})-/);
+    if (bus) return `PT-${bus[1]}`;
+  }
+
+  return '';
+}
+
+function getReviewImageUrl(item) {
+  const direct = getFirstValue(item, [
+    'imageUrl',
+    'image_url',
+    'reviewImage',
+    'review_image',
+    'reviewImageUrl',
+    'review_image_url',
+    'photoUrl',
+    'photo_url',
+    'publicPath',
+    'imagePath',
+  ]);
+
+  if (direct) return direct;
+
+  const id = String(item?.id || item?.reviewId || item?.review_id || '').trim();
+  const match = id.match(/^([A-Z]{2}-\d{3})-(.+)$/i);
+  if (!match) return '';
+
+  const operatorCode = getImageOperatorCode(item) || match[1].toUpperCase();
+  const imageFileName = getFirstValue(item, ['imageFileName', 'image_file_name']) || `${match[2].replace(/\.[^.]+$/, '')}.webp`;
+  return `/anhdanggia/${getCategoryFolder(item)}/${operatorCode}/${imageFileName}`;
+}
+
+function hideBrokenImage(event) {
+  const wrap = event.currentTarget.closest('[data-review-image-wrap]');
+  if (wrap) wrap.style.display = 'none';
+  else event.currentTarget.style.display = 'none';
+}
+
+
 function confidenceLevel(score) {
   if (score >= 0.9) return 'Rủi ro cao';
   if (score >= 0.5) return 'Cần xem lại';
@@ -86,11 +445,73 @@ function getAIActionClass(action) {
   return styles.aiManual;
 }
 
+
+const PARTNER_SLA_STORAGE_KEY = 'reviewhub-partner-sla-submitted-reviews';
+
+function readPartnerSlaStorage() {
+  if (typeof window === 'undefined') return [];
+
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(PARTNER_SLA_STORAGE_KEY) || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function syncPartnerSlaReviewStatus(review, status) {
+  if (typeof window === 'undefined' || !review || !isPartnerPrivateReview(review)) return;
+
+  const id = String(getReviewId(review) || review.id || review.reviewId || review.review_id || '').trim();
+  if (!id) return;
+
+  const current = readPartnerSlaStorage();
+  const rejectReason = getFirstValue(review, [
+    'rejectReason',
+    'reject_reason',
+    'rejectionReason',
+    'rejection_reason',
+    'adminReason',
+    'admin_reason',
+    'moderationReason',
+    'moderation_reason',
+    'reason',
+    'aiReason',
+    'ai_reason',
+  ]);
+
+  const updated = {
+    ...review,
+    id,
+    reviewId: review.reviewId || review.review_id || id,
+    moderationStatus: status,
+    status,
+    reviewStatus: status,
+    sourceSystem: 'partner-web',
+    source: 'partner-web',
+    visibility: 'private',
+    dataScope: 'private',
+    data_scope: 'private',
+    updatedAt: new Date().toISOString(),
+    moderatedAt: new Date().toISOString(),
+    rejectReason: status === 'rejected'
+      ? (review.rejectReason || review.reject_reason || rejectReason || 'Admin đã từ chối review này.')
+      : (review.rejectReason || review.reject_reason || ''),
+  };
+
+  const next = [updated, ...current.filter((item) => String(getReviewId(item) || item.id || item.reviewId) !== id)];
+  window.localStorage.setItem(PARTNER_SLA_STORAGE_KEY, JSON.stringify(next.slice(0, 500)));
+  window.dispatchEvent(new Event('storage'));
+  window.dispatchEvent(new CustomEvent('reviewhub:partner-sla-updated', { detail: updated }));
+}
+
 export default function AdminModerationPage() {
   const [queue, setQueue] = useState([]);
+  const [partnerAccounts, setPartnerAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [keyword, setKeyword] = useState('');
   const [riskFilter, setRiskFilter] = useState('all');
+  const [sourceFilter, setSourceFilter] = useState('all');
   const [selectedReview, setSelectedReview] = useState(null);
   const [page, setPage] = useState(1);
   const [actionLoading, setActionLoading] = useState('');
@@ -128,6 +549,12 @@ export default function AdminModerationPage() {
   useEffect(() => {
     fetchQueue();
   }, [fetchQueue]);
+
+  useEffect(() => {
+    api.get('/api/admin/partners')
+      .then(res => setPartnerAccounts(Array.isArray(res.data) ? res.data : []))
+      .catch(() => setPartnerAccounts([]));
+  }, []);
 
   // Load operators for crawl
   useEffect(() => {
@@ -168,7 +595,7 @@ export default function AdminModerationPage() {
         ...prev,
         `[${nowTime()}] ✓ Crawl hoàn tất.`,
         `[${nowTime()}] ✓ Import vào database xong.`,
-        ...(syncEmail.trim() ? [`[${nowTime()}] ✓ Đã gán tài khoản ${syncEmail.trim()} vào nhà xe.`] : []),
+        ...(syncEmail.trim() ? [`[${nowTime()}] ✓ Đã gán tài khoản ${syncEmail.trim()} vào dịch vụ.`] : []),
         `[${nowTime()}] Kết quả: ${data.inserted ?? 0} review mới, ${data.skipped ?? 0} bỏ qua, ${data.failed ?? 0} lỗi.`,
       ]);
       setSyncResult({ ok: true, inserted: data.inserted ?? 0 });
@@ -191,10 +618,19 @@ export default function AdminModerationPage() {
   async function handleModeration(id, action) {
     if (!id || actionLoading) return;
 
+    const reviewBeforeAction =
+      queue.find(item => String(getReviewId(item) || item.id) === String(id)) ||
+      (String(getReviewId(selectedReview) || selectedReview?.id) === String(id) ? selectedReview : null);
+
     setActionLoading(`${id}_${action}`);
 
     try {
       await api.post(`/api/admin/review-ai/${id}/${action}`);
+
+      syncPartnerSlaReviewStatus(
+        reviewBeforeAction,
+        action === 'approve' ? 'approved' : 'rejected',
+      );
 
       setQueue(prev => prev.filter(item => item.id !== id));
 
@@ -210,6 +646,8 @@ export default function AdminModerationPage() {
       setActionLoading('');
     }
   }
+
+  const partnerAccountLookup = useMemo(() => buildPartnerAccountLookup(partnerAccounts), [partnerAccounts]);
 
   const filteredQueue = useMemo(() => {
     const q = keyword.trim().toLowerCase();
@@ -232,15 +670,37 @@ export default function AdminModerationPage() {
           item.reviewerName,
           item.comment,
           item.aiReason,
+          item.sourceSystem,
+          getSourceLabel(item.sourceSystem),
+          item.ownerPartnerCode,
+          getPartnerSenderAccount(item, partnerAccountLookup),
         ]
           .filter(Boolean)
           .some(v => String(v).toLowerCase().includes(q));
 
       const matchRisk = riskFilter === 'all' || riskFilter === risk;
+      const matchSource = sourceFilter === 'all' || normalizeSource(item.sourceSystem || item.source) === sourceFilter;
 
-      return matchKeyword && matchRisk;
+      return matchKeyword && matchRisk && matchSource;
     });
-  }, [queue, keyword, riskFilter]);
+  }, [queue, keyword, riskFilter, sourceFilter, partnerAccountLookup]);
+
+  const moderationStats = useMemo(() => {
+    const google = filteredQueue.filter(item => normalizeSource(item.sourceSystem || item.source) === 'google-maps').length;
+    const publicUser = filteredQueue.filter(item => normalizeSource(item.sourceSystem || item.source) === 'public-web').length;
+    const partner = filteredQueue.filter(item => normalizeSource(item.sourceSystem || item.source) === 'partner-web').length;
+    const shared = filteredQueue.filter(item => isPublicSharedReview(item)).length;
+    const privatePartner = filteredQueue.filter(item => isPartnerPrivateReview(item)).length;
+
+    return {
+      total: filteredQueue.length,
+      google,
+      publicUser,
+      partner,
+      shared,
+      privatePartner,
+    };
+  }, [filteredQueue]);
 
   function getCarrierKey(item) {
     return `${item.targetCode || 'NO_CODE'}__${item.targetName || 'NO_NAME'}`;
@@ -315,6 +775,11 @@ export default function AdminModerationPage() {
           : '/api/admin/review-ai/bulk-reject';
 
       await api.post(endpoint, { ids });
+
+      ids.forEach(id => {
+        const review = queue.find(item => String(getReviewId(item) || item.id) === String(id));
+        syncPartnerSlaReviewStatus(review, action === 'approve' ? 'approved' : 'rejected');
+      });
 
       setBulkProgress(prev => ({
         ...(prev || {}),
@@ -451,6 +916,9 @@ Bạn có chắc muốn áp dụng đề xuất của AI không?`
         try {
           await api.post(`/api/admin/review-ai/${job.id}/${job.action}`);
 
+          const review = queue.find(item => String(getReviewId(item) || item.id) === String(job.id));
+          syncPartnerSlaReviewStatus(review, job.action === 'approve' ? 'approved' : 'rejected');
+
           doneIds.push(job.id);
 
           if (job.action === 'approve') approvedDone += 1;
@@ -559,7 +1027,7 @@ Bạn có chắc muốn áp dụng đề xuất của AI không?`
 
   useEffect(() => {
     setPage(1);
-  }, [keyword, riskFilter, selectedCarrierKey]);
+  }, [keyword, riskFilter, sourceFilter, selectedCarrierKey]);
 
   useEffect(() => {
     if (
@@ -582,14 +1050,11 @@ Bạn có chắc muốn áp dụng đề xuất của AI không?`
     <div className={styles.page}>
       <section className={styles.hero}>
         <div>
-          <span className={styles.heroBadge}>
-            AI MODERATION CENTER
-          </span>
 
           <h1>Kiểm duyệt review</h1>
 
           <p>
-            Theo dõi review bị AI gắn cờ, kiểm tra chất lượng nội dung và xử lý nhanh.
+            Kiểm tra review từ Google Maps, người dùng public và review riêng do partner gửi. Nội dung partner chỉ được hiển thị cho đúng tài khoản sau khi admin duyệt.
           </p>
         </div>
 
@@ -608,7 +1073,7 @@ Bạn có chắc muốn áp dụng đề xuất của AI không?`
           <span className={styles.syncLabel}>Đồng bộ Review từ Google Maps</span>
 
           <div className={styles.syncControls}>
-            <span className={styles.syncFieldLabel}>Nhà xe:</span>
+            <span className={styles.syncFieldLabel}>Dịch vụ:</span>
             <select
               className={styles.syncSelect}
               value={syncOpCode}
@@ -706,6 +1171,17 @@ Bạn có chắc muốn áp dụng đề xuất của AI không?`
           <option value="low">Rủi ro thấp</option>
         </select>
 
+        <select
+          value={sourceFilter}
+          onChange={e => setSourceFilter(e.target.value)}
+          className={styles.select}
+        >
+          <option value="all">Tất cả nguồn</option>
+          <option value="google-maps">Google Maps chung</option>
+          <option value="public-web">Người dùng public</option>
+          <option value="partner-web">Partner gửi riêng</option>
+        </select>
+
         <button
           className={styles.aiButton}
           disabled={!!actionLoading || aiLoading || visibleQueue.length === 0}
@@ -735,15 +1211,41 @@ Bạn có chắc muốn áp dụng đề xuất của AI không?`
         </button>
       </section>
 
+      <section className={styles.sourceSummary}>
+        <article className={styles.sourceSummaryCard}>
+          <span>Tổng hàng chờ</span>
+          <strong>{moderationStats.total}</strong>
+          <small>Review đang đợi admin xử lý</small>
+        </article>
+
+        <article className={`${styles.sourceSummaryCard} ${styles.googleSummary}`}>
+          <span>Google Maps</span>
+          <strong>{moderationStats.google}</strong>
+          <small>Nguồn chung từ crawl Maps</small>
+        </article>
+
+        <article className={`${styles.sourceSummaryCard} ${styles.publicSummary}`}>
+          <span>Người dùng public</span>
+          <strong>{moderationStats.publicUser}</strong>
+          <small>Duyệt xong chia sẻ cho đúng dịch vụ</small>
+        </article>
+
+        <article className={`${styles.sourceSummaryCard} ${styles.partnerSummary}`}>
+          <span>Partner gửi</span>
+          <strong>{moderationStats.partner}</strong>
+          <small>Dữ liệu riêng từng tài khoản</small>
+        </article>
+      </section>
+
       <section className={styles.carrierPanel}>
         <div className={styles.sectionHead}>
           <div>
-            <span>Phân nhóm nhà xe</span>
-            <h2>Chọn từng nhà xe để duyệt chính xác hơn</h2>
+            <span>Phân nhóm dịch vụ</span>
+            <h2>Chọn từng dịch vụ để duyệt chính xác hơn</h2>
           </div>
 
           <small>
-            {carrierGroups.length} nhà xe · {filteredQueue.length} review đang lọc
+            {carrierGroups.length} dịch vụ · {filteredQueue.length} review đang lọc
           </small>
         </div>
 
@@ -754,7 +1256,7 @@ Bạn có chắc muốn áp dụng đề xuất của AI không?`
             disabled={!!actionLoading || aiLoading}
           >
             <div>
-              <strong>Tất cả nhà xe</strong>
+              <strong>Tất cả dịch vụ</strong>
               <span>ALL</span>
             </div>
 
@@ -878,7 +1380,7 @@ Bạn có chắc muốn áp dụng đề xuất của AI không?`
 
             <small>
               {selectedCarrierKey === 'all'
-                ? 'Đang xem tất cả nhà xe'
+                ? 'Đang xem tất cả dịch vụ'
                 : carrierGroups.find(group => group.key === selectedCarrierKey)?.name}
             </small>
           </div>
@@ -907,6 +1409,22 @@ Bạn có chắc muốn áp dụng đề xuất của AI không?`
                     </div>
                   </div>
 
+                  <div className={styles.sourceRow}>
+                    <span className={`${styles.sourceBadge} ${getSourceBadgeClass(styles, item.sourceSystem || item.source)}`}>
+                      {getSourceLabel(item.sourceSystem || item.source)}
+                    </span>
+                    {isPartnerPrivateReview(item) && (
+                      <span className={styles.privateNotice}>Dữ liệu riêng</span>
+                    )}
+                    {normalizeSource(item.sourceSystem || item.source) === 'public-web' && (
+                      <span className={styles.sharedNotice}>Dữ liệu chung theo mã dịch vụ</span>
+                    )}
+                  </div>
+
+                  {isPartnerPrivateReview(item) && (
+                    <PartnerSenderHighlight item={item} partnerAccountLookup={partnerAccountLookup} compact />
+                  )}
+
                   {aiDecision && (
                     <div className={`${styles.aiDecision} ${getAIActionClass(aiDecision.action)}`}>
                       <strong>{getAIActionLabel(aiDecision.action)}</strong>
@@ -926,14 +1444,24 @@ Bạn có chắc muốn áp dụng đề xuất của AI không?`
                     </div>
 
                     <div>
-                      <label>AI</label>
-                      <strong>{confidenceLevel(score)}</strong>
+                      <label>Nguồn</label>
+                      <strong>{getSourceLabel(item.sourceSystem || item.source)}</strong>
                     </div>
                   </div>
 
                   <div className={styles.comment}>
                     {item.comment || 'Không có nội dung'}
                   </div>
+
+                  {getReviewImageUrl(item) && (
+                    <div className={styles.cardImageBox} data-review-image-wrap>
+                      <img
+                        src={getReviewImageUrl(item)}
+                        alt="Ảnh khách gửi kèm review"
+                        onError={hideBrokenImage}
+                      />
+                    </div>
+                  )}
 
                   <div className={styles.reason}>
                     <label>Lý do AI</label>
@@ -1032,6 +1560,22 @@ Bạn có chắc muốn áp dụng đề xuất của AI không?`
               </div>
 
               <div className={styles.modalItem}>
+                <label>Nguồn review</label>
+                <strong>{getSourceLabel(selectedReview.sourceSystem || selectedReview.source)}</strong>
+              </div>
+
+              {isPartnerPrivateReview(selectedReview) && (
+                <div className={styles.modalWideBlock}>
+                  <PartnerSenderHighlight item={selectedReview} partnerAccountLookup={partnerAccountLookup} />
+                </div>
+              )}
+
+              <div className={styles.modalItem}>
+                <label>Phạm vi dữ liệu</label>
+                <strong>{isPartnerPrivateReview(selectedReview) ? 'Riêng của tài khoản partner gửi' : 'Dữ liệu dùng chung theo dịch vụ'}</strong>
+              </div>
+
+              <div className={styles.modalItem}>
                 <label>AI Confidence</label>
                 <strong>
                   {Math.round(Number(selectedReview.aiConfidence || 0) * 100)}%
@@ -1042,6 +1586,20 @@ Bạn có chắc muốn áp dụng đề xuất của AI không?`
                 <label>Nội dung</label>
                 <p>{selectedReview.comment}</p>
               </div>
+
+              {getReviewImageUrl(selectedReview) && (
+                <div className={styles.reviewImagePanel} data-review-image-wrap>
+                  <div className={styles.reviewImageHead}>
+                    <label>Ảnh đính kèm</label>
+                    <span>{getFirstValue(selectedReview, ['imageFileName', 'image_file_name']) || 'Ảnh review'}</span>
+                  </div>
+                  <img
+                    src={getReviewImageUrl(selectedReview)}
+                    alt="Ảnh đính kèm của review"
+                    onError={hideBrokenImage}
+                  />
+                </div>
+              )}
 
               <div className={styles.fullContent}>
                 <label>Lý do AI</label>

@@ -72,7 +72,7 @@ public class PartnerReviewAIController {
 
             List<PartnerReviewItem> safeReviews = reviews.stream()
                     .filter(item -> item.comment() != null && !item.comment().isBlank())
-                    .limit(300)
+                    .limit(500)
                     .toList();
 
             if (safeReviews.isEmpty()) {
@@ -284,7 +284,7 @@ Quy tắc quan trọng:
 
         HttpResponse<String> res = client.send(req, HttpResponse.BodyHandlers.ofString());
 
-        if (res.statusCode() < 200 || res.statusCode() >= 300) {
+        if (res.statusCode() < 200 || res.statusCode() >= 500) {
             throw new RuntimeException("OpenAI HTTP " + res.statusCode() + ": " + res.body());
         }
 

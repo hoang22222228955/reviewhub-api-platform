@@ -52,7 +52,7 @@ export default function PartnerDashboardPage() {
       .catch(() => {});
 
     fetchReviews({
-      size: 300,
+      size: 1000,
       assignedOperatorCode: currentUser.assignedOperatorCode,
     })
       .then((data) => {

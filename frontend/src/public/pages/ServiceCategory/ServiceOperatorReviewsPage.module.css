@@ -2865,3 +2865,79 @@ img {
     height: 180px;
   }
 }
+
+
+/* ===== HIỂN THỊ ẢNH REVIEW TỪ /public/anhdanggia ===== */
+/* Có ảnh đúng file thì hiện. Không có ảnh / ảnh lỗi thì component tự ẩn. */
+.reviewGallery {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 132px));
+  gap: 8px;
+  align-items: start;
+}
+
+.reviewThumb {
+  width: 100%;
+  height: 92px;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid #edf0f3;
+  background: #f8fafc;
+}
+
+.moreThumb {
+  min-height: 92px;
+  border-radius: 12px;
+  border: 1px solid #edf0f3;
+  background: #f8fafc;
+}
+
+@media (max-width: 760px) {
+  .reviewGallery {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .reviewThumb,
+  .moreThumb {
+    height: 110px;
+  }
+}
+
+
+/* ===== PUBLIC REVIEW IMAGE: cmt cũ nhất = 1.webp ===== */
+.reviewGallery {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: minmax(96px, 132px);
+  gap: 8px;
+  align-items: start;
+}
+
+.reviewThumb {
+  width: 132px;
+  height: 92px;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid #edf0f3;
+  background: #f8fafc;
+}
+
+.moreThumb {
+  min-height: 92px;
+  border-radius: 12px;
+  border: 1px solid #edf0f3;
+  background: #f8fafc;
+}
+
+@media (max-width: 760px) {
+  .reviewGallery {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .reviewThumb,
+  .moreThumb {
+    width: 100%;
+    height: 110px;
+  }
+}

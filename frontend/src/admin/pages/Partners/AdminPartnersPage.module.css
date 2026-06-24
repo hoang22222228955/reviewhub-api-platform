@@ -565,3 +565,261 @@
     padding: 12px;
   }
 }
+
+
+/* ===== PATCH: AdminPartners compact typography - chỉ chỉnh cỡ chữ giống Admin Moderation ===== */
+
+/* Tổng thể chữ nhỏ và nhẹ hơn, không đổi layout/logic */
+.page {
+  font-size: 12.5px !important;
+  line-height: 1.55 !important;
+}
+
+/* Hero gọn hơn, bớt cảm giác chữ quá to */
+.heroPanel {
+  min-height: 124px !important;
+  padding: 22px 24px !important;
+}
+
+.eyebrow {
+  font-size: 10.2px !important;
+  font-weight: 600 !important;
+  letter-spacing: .035em !important;
+}
+
+.heroPanel h1 {
+  font-size: clamp(22px, 2.15vw, 27px) !important;
+  line-height: 1.12 !important;
+  font-weight: 640 !important;
+  letter-spacing: -.035em !important;
+}
+
+.heroPanel p {
+  max-width: 700px !important;
+  margin-top: 8px !important;
+  font-size: 12.4px !important;
+  line-height: 1.62 !important;
+  font-weight: 400 !important;
+}
+
+/* KPI nhỏ hơn giống nhịp Admin Moderation */
+.metricCard {
+  padding: 15px 16px 14px !important;
+  border-radius: 20px !important;
+}
+
+.metricCard span {
+  font-size: 11.2px !important;
+  font-weight: 500 !important;
+}
+
+.metricCard strong {
+  margin-top: 8px !important;
+  font-size: 22px !important;
+  font-weight: 620 !important;
+  letter-spacing: -.035em !important;
+}
+
+.metricCard small {
+  margin-top: 7px !important;
+  font-size: 11.1px !important;
+  line-height: 1.45 !important;
+  font-weight: 400 !important;
+}
+
+/* Toolbar / input / select nhỏ lại */
+.toolbar {
+  gap: 10px !important;
+  margin-bottom: 12px !important;
+}
+
+.searchBox {
+  padding: 9px 12px !important;
+  border-radius: 14px !important;
+}
+
+.searchBox span {
+  font-size: 13px !important;
+}
+
+.searchBox input,
+.filterSelect,
+.operatorSelect {
+  font-size: 11.8px !important;
+  font-weight: 430 !important;
+}
+
+.filterSelect,
+.operatorSelect {
+  min-height: 38px !important;
+  padding: 8px 11px !important;
+  border-radius: 12px !important;
+}
+
+/* Bảng nhỏ và tinh tế hơn */
+.partnerTable {
+  min-width: 960px !important;
+}
+
+.partnerTable th {
+  padding: 11px 14px !important;
+  font-size: 10.8px !important;
+  line-height: 1.15 !important;
+  font-weight: 560 !important;
+  letter-spacing: .015em !important;
+}
+
+.partnerTable td {
+  padding: 11px 14px !important;
+  font-size: 11.8px !important;
+  line-height: 1.45 !important;
+  font-weight: 420 !important;
+}
+
+.partnerCell {
+  gap: 10px !important;
+  min-width: 238px !important;
+}
+
+.avatar {
+  width: 34px !important;
+  height: 34px !important;
+  border-radius: 12px !important;
+  font-size: 11.5px !important;
+  font-weight: 600 !important;
+}
+
+.partnerCell strong {
+  font-size: 12px !important;
+  line-height: 1.25 !important;
+  font-weight: 560 !important;
+}
+
+.partnerCell span {
+  margin-top: 2px !important;
+  font-size: 10.8px !important;
+  line-height: 1.35 !important;
+  font-weight: 400 !important;
+}
+
+.codeTag {
+  padding: 5px 8px !important;
+  border-radius: 9px !important;
+  font-size: 10.8px !important;
+  line-height: 1 !important;
+  font-weight: 560 !important;
+}
+
+.statusPill {
+  min-height: 25px !important;
+  padding: 0 9px !important;
+  gap: 5px !important;
+  font-size: 10.8px !important;
+  line-height: 1 !important;
+  font-weight: 520 !important;
+}
+
+.statusPill::before {
+  width: 6px !important;
+  height: 6px !important;
+}
+
+.quotaBox {
+  min-width: 136px !important;
+  gap: 6px !important;
+}
+
+.quotaBox span {
+  font-size: 10.8px !important;
+  font-weight: 500 !important;
+}
+
+.quotaBox i {
+  height: 7px !important;
+}
+
+/* Button trong bảng nhỏ lại, đỡ nặng chữ */
+.actionGroup {
+  gap: 7px !important;
+}
+
+.actionGroup button {
+  min-height: 36px !important;
+  padding: 0 13px !important;
+  border-radius: 12px !important;
+  font-size: 11.4px !important;
+  font-weight: 560 !important;
+}
+
+.okText,
+.errText {
+  font-size: 10.8px !important;
+  font-weight: 540 !important;
+}
+
+/* Card shared/ui nếu title/description bị lớn thì ép nhẹ lại trong trang này */
+.page :global(.cardTitle),
+.page :global(.CardTitle),
+.page :global(.cardHeader h2),
+.page :global(.card h2) {
+  font-size: 18px !important;
+  font-weight: 620 !important;
+  letter-spacing: -.02em !important;
+}
+
+.page :global(.cardDescription),
+.page :global(.CardDescription),
+.page :global(.cardHeader p),
+.page :global(.card p) {
+  font-size: 12.4px !important;
+  line-height: 1.6 !important;
+  font-weight: 400 !important;
+}
+
+/* Modal cũng hạ size chữ cho đồng bộ */
+.partnerModal {
+  font-size: 12.3px !important;
+}
+
+.modalHeader h2 {
+  font-size: clamp(20px, 2vw, 25px) !important;
+  font-weight: 640 !important;
+}
+
+.modalHeader p {
+  font-size: 12.2px !important;
+  line-height: 1.6 !important;
+}
+
+.largeAvatar {
+  font-size: 17px !important;
+  font-weight: 640 !important;
+}
+
+.detailGrid label,
+.infoBlock label {
+  font-size: 10.8px !important;
+  font-weight: 560 !important;
+}
+
+.detailGrid strong,
+.infoBlock strong {
+  font-size: 12px !important;
+  font-weight: 560 !important;
+}
+
+/* Responsive giữ nguyên layout, chỉ đảm bảo chữ không phình */
+@media (max-width: 760px) {
+  .heroPanel h1 {
+    font-size: 24px !important;
+  }
+
+  .heroPanel p {
+    font-size: 12.2px !important;
+  }
+
+  .metricCard strong {
+    font-size: 21px !important;
+  }
+}
+

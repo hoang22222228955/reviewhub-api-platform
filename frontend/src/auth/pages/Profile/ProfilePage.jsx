@@ -42,9 +42,24 @@ function slugifyVietnamese(name = '') {
 }
 
 function tierColor(id) {
+  if (id === 'custom') return '#8b5cf6'
   if (id === 'growth') return '#f59e0b'
   if (id === 'enterprise') return '#6366f1'
   return '#22c55e'
+}
+
+function getCustomLevelName(level = '') {
+  if (level === 'growth') return 'Tăng trưởng'
+  if (level === 'enterprise') return 'Doanh nghiệp'
+  return 'Khởi đầu'
+}
+
+function countCartServices(items = '') {
+  return String(items || '')
+    .split(',')
+    .map(item => item.trim())
+    .filter(Boolean)
+    .length
 }
 
 const HISTORY_PAGE_SIZE = 10
@@ -111,21 +126,52 @@ export default function ProfilePage() {
   })
 
   const CART_KEY = 'reviewhub-cart'
-  const [cartPlanId, setCartPlanId] = useState(() => {
-    try { return JSON.parse(sessionStorage.getItem(CART_KEY))?.planId || null } catch { return null }
-  })
-  const [cartQty, setCartQty] = useState(() => {
-    try { return JSON.parse(sessionStorage.getItem(CART_KEY))?.qty || 1 } catch { return 1 }
-  })
 
-  function saveCart(planId, qty) {
-    setCartPlanId(planId)
-    setCartQty(qty)
-    sessionStorage.setItem(CART_KEY, JSON.stringify({ planId, qty }))
+  function readCart() {
+    try {
+      return JSON.parse(sessionStorage.getItem(CART_KEY) || '{}') || {}
+    } catch {
+      return {}
+    }
   }
+
+  const [cartPlanId, setCartPlanId] = useState(() => readCart()?.planId || null)
+  const [cartQty, setCartQty] = useState(() => readCart()?.qty || 1)
+  const [cartItems, setCartItems] = useState(() => readCart()?.items || '')
+  const [cartCategories, setCartCategories] = useState(() => readCart()?.categories || '')
+  const [cartPrice, setCartPrice] = useState(() => Number(readCart()?.price || 0))
+  const [cartPricePerMonth, setCartPricePerMonth] = useState(() => Number(readCart()?.pricePerMonth || 0))
+  const [cartLevel, setCartLevel] = useState(() => readCart()?.level || '')
+
+  function saveCart(planId, qty, extra = {}) {
+    const data = {
+      planId,
+      qty,
+      items: extra.items ?? cartItems,
+      categories: extra.categories ?? cartCategories,
+      price: Number(extra.price ?? cartPrice ?? 0),
+      pricePerMonth: Number(extra.pricePerMonth ?? cartPricePerMonth ?? 0),
+      level: extra.level ?? cartLevel,
+    }
+
+    setCartPlanId(data.planId)
+    setCartQty(data.qty)
+    setCartItems(data.items)
+    setCartCategories(data.categories)
+    setCartPrice(data.price)
+    setCartPricePerMonth(data.pricePerMonth)
+    setCartLevel(data.level)
+    sessionStorage.setItem(CART_KEY, JSON.stringify(data))
+  }
+
   function clearCart() {
     setCartPlanId(null)
     setCartQty(1)
+    setCartItems('')
+    setCartCategories('')
+    setCartPrice(0)
+    setCartPricePerMonth(0)
+    setCartLevel('')
     sessionStorage.removeItem(CART_KEY)
   }
 
@@ -143,16 +189,36 @@ export default function ProfilePage() {
     if (tab === 'plan') refreshUser()
   }, [])
 
-  // Đọc planId từ URL (từ bảng giá chuyển sang)
+  // Đọc planId + dịch vụ đã chọn từ URL (từ bảng giá chuyển sang)
   useEffect(() => {
     const planId = searchParams.get('planId')
     const qtyParam = parseInt(searchParams.get('qty') || '1', 10)
+
     if (planId) {
-      saveCart(planId, Math.max(1, Math.min(12, qtyParam)))
+      const safeQty = Math.max(1, Math.min(12, qtyParam))
+      const totalPriceFromUrl = Number(searchParams.get('price') || 0)
+      const pricePerMonthFromUrl = Number(searchParams.get('pricePerMonth') || 0)
+        || (totalPriceFromUrl > 0 ? Math.round(totalPriceFromUrl / safeQty) : 0)
+
+      saveCart(planId, safeQty, {
+        items: searchParams.get('items') || '',
+        categories: searchParams.get('categories') || '',
+        price: totalPriceFromUrl,
+        pricePerMonth: pricePerMonthFromUrl,
+        level: searchParams.get('level') || '',
+      })
+
       setSearchParams(prev => {
         const next = new URLSearchParams(prev)
         next.delete('planId')
         next.delete('qty')
+        next.delete('items')
+        next.delete('categories')
+        next.delete('price')
+        next.delete('pricePerMonth')
+        next.delete('rawPrice')
+        next.delete('discount')
+        next.delete('level')
         return next
       })
     }
@@ -176,6 +242,8 @@ export default function ProfilePage() {
 
   const [payStep, setPayStep] = useState('choose')
   const [payMethod, setPayMethod] = useState(null)
+  const [paymentSubmitting, setPaymentSubmitting] = useState(false)
+  const [paymentError, setPaymentError] = useState('')
   const [showCancelConfirm, setShowCancelConfirm] = useState(false)
   const [showPlanConflict, setShowPlanConflict] = useState(false)
   const [logoUploading, setLogoUploading] = useState(false)
@@ -204,11 +272,77 @@ export default function ProfilePage() {
     reader.readAsDataURL(file)
   }
 
+  async function handleConfirmPayment(method) {
+    if (paymentSubmitting) return
+
+    try {
+      setPaymentSubmitting(true)
+      setPaymentError('')
+
+      const selectedServiceCodes = String(cartItems || '')
+        .split(',')
+        .map(item => item.trim())
+        .filter(Boolean)
+
+      const categories = String(cartCategories || '')
+        .split(',')
+        .map(item => item.trim())
+        .filter(Boolean)
+
+      await api.post('/api/partner/submit-payment', {
+        planId: cartPlanId,
+        qty: cartQty,
+        paymentMethod: method || payMethod || 'banking',
+        selectedServiceCodes,
+        categories,
+        price: cartTotalPrice,
+        level: cartLevel || undefined,
+      })
+
+      // Giữ đúng logic cũ: bấm thanh toán xong chuyển sang màn chờ duyệt ngay trong popup.
+      setPayStep('waiting')
+      setPayMethod(null)
+      clearCart()
+
+      api.get('/api/partner/my-purchases')
+        .then(r => setPurchaseHistoryData(r.data))
+        .catch(() => {})
+    } catch (error) {
+      console.error('Submit payment error:', error)
+      setPaymentError(
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        'Không gửi được yêu cầu thanh toán. Vui lòng kiểm tra backend.'
+      )
+    } finally {
+      setPaymentSubmitting(false)
+    }
+  }
+
   if (!currentUser) return null
 
   const currentPlan = livePlans.find(p => p.id === currentUser?.currentPlanId) || getPlanById(currentUser?.currentPlanId)
-  const cartPlanData = livePlans.find(p => p.id === cartPlanId) || null
-  const cartTotalPrice = cartPlanData ? cartPlanData.price * cartQty : 0
+  const cartServiceCount = countCartServices(cartItems)
+  const customBasePlan = cartPlanId === 'custom'
+    ? (livePlans.find(p => p.id === (cartLevel || 'starter')) || getPlanById(cartLevel || 'starter'))
+    : null
+  const customPricePerMonth = cartPricePerMonth > 0
+    ? cartPricePerMonth
+    : (cartPrice > 0 ? Math.round(cartPrice / Math.max(1, cartQty)) : (customBasePlan?.price || 0) * Math.max(1, cartServiceCount))
+
+  const customCartPlanData = cartPlanId === 'custom'
+    ? {
+        id: 'custom',
+        name: `Tự chọn - ${getCustomLevelName(cartLevel)}`,
+        price: customPricePerMonth,
+        quota: (customBasePlan?.quota || customBasePlan?.quotaLimit || 0) * Math.max(1, cartServiceCount),
+        durationDays: customBasePlan?.durationDays || 30,
+      }
+    : null
+  const cartPlanData = livePlans.find(p => p.id === cartPlanId) || customCartPlanData || null
+  const cartTotalPrice = cartPlanId === 'custom'
+    ? customPricePerMonth * cartQty
+    : (cartPlanData ? cartPlanData.price * cartQty : 0)
 
   const liveProfile = {
     name: currentUser?.name || '',
@@ -561,7 +695,11 @@ export default function ProfilePage() {
             <span className={styles.cartTierDot} style={{ background: tierColor(cartPlanId) }} />
             <div className={styles.cartItemInfo}>
               <div className={styles.cartItemName}>{cartPlanData.name}</div>
-              <div className={styles.cartItemMeta}>{formatNumber(cartPlanData.quota)} request · {cartPlanData.durationDays} ngày</div>
+              <div className={styles.cartItemMeta}>
+                {cartPlanId === 'custom'
+                  ? `${Math.max(1, cartServiceCount)} dịch vụ · mức ${getCustomLevelName(cartLevel)} · ${formatNumber(cartPlanData.quota)} request`
+                  : `${formatNumber(cartPlanData.quota)} request · ${cartPlanData.durationDays} ngày`}
+              </div>
             </div>
             <div className={styles.cartItemPriceBlock}>
               <span className={styles.cartPriceMain}>{formatCurrency(cartPlanData.price)}</span>
@@ -594,6 +732,18 @@ export default function ProfilePage() {
             <span>Gói: {cartPlanData.name}</span>
             <span>{formatCurrency(cartPlanData.price)}</span>
           </div>
+          {cartPlanId === 'custom' && (
+            <div className={styles.orderRow}>
+              <span>Dịch vụ đã chọn</span>
+              <span>{Math.max(1, cartServiceCount)} dịch vụ</span>
+            </div>
+          )}
+          {cartPlanId === 'custom' && cartServiceCount >= 2 && (
+            <div className={styles.orderRow}>
+              <span>Ưu đãi tự chọn</span>
+              <span>-10%</span>
+            </div>
+          )}
           <div className={styles.orderRow}>
             <span>Số tháng</span>
             <span>× {cartQty}</span>
@@ -609,8 +759,9 @@ export default function ProfilePage() {
               setShowPlanConflict(false)
               const freshUser = await refreshUser()
               const activePlanId = freshUser?.currentPlanId
-              // Có gói đang hoạt động VÀ gói trong giỏ khác gói đó → conflict
-              if (activePlanId && cartPlanId !== activePlanId) {
+              const buyingPlanId = cartPlanId === 'custom' ? (cartLevel || 'starter') : cartPlanId
+              // Có gói đang hoạt động VÀ cấp gói trong giỏ khác gói đó → conflict
+              if (activePlanId && activePlanId !== 'custom' && buyingPlanId !== activePlanId) {
                 setShowPlanConflict(true)
                 return
               }
@@ -1144,15 +1295,14 @@ export default function ProfilePage() {
                         ⚠️ Vui lòng nhập <strong>đúng nội dung chuyển khoản</strong> để hệ thống tự động xác nhận gói của bạn.
                       </p>
                     </div>
+                    {paymentError && <p style={{ color: '#dc2626', fontWeight: 700, marginTop: 10 }}>{paymentError}</p>}
                     <button
+                      type="button"
                       className={styles.btnCheckout}
-                      onClick={async () => {
-                        await submitPayment(cartPlanId, cartQty, 'banking')
-                        setPayStep('waiting')
-                        clearCart()
-                      }}
+                      disabled={paymentSubmitting}
+                      onClick={() => handleConfirmPayment('banking')}
                     >
-                      ✓ Tôi đã chuyển khoản
+                      {paymentSubmitting ? 'Đang gửi...' : '✓ Tôi đã chuyển khoản'}
                     </button>
                   </div>
                 )
@@ -1205,15 +1355,14 @@ export default function ProfilePage() {
                         ⚠️ Vui lòng nhập <strong>đúng nội dung chuyển khoản</strong> để hệ thống tự động xác nhận gói của bạn.
                       </p>
                     </div>
+                    {paymentError && <p style={{ color: '#dc2626', fontWeight: 700, marginTop: 10 }}>{paymentError}</p>}
                     <button
+                      type="button"
                       className={styles.btnCheckout}
-                      onClick={async () => {
-                        await submitPayment(cartPlanId, cartQty, payMethod)
-                        setPayStep('waiting')
-                        clearCart()
-                      }}
+                      disabled={paymentSubmitting}
+                      onClick={() => handleConfirmPayment(payMethod)}
                     >
-                      ✓ Tôi đã thanh toán
+                      {paymentSubmitting ? 'Đang gửi...' : '✓ Tôi đã thanh toán'}
                     </button>
                   </div>
                 )

@@ -50,7 +50,12 @@ function readPublicServiceReviews() {
         review.reviewId ||
         `${review.targetCode || review.operatorCode || review.partnerCode || review.code || 'UNKNOWN'}-${review.targetName || review.operatorName || review.partnerName || review.name || ''}-${review.reviewerName || review.userName || review.authorName || review.customerName || ''}-${review.createdAt || review.created_at || ''}-${review.comment || review.content || review.reviewText || review.text || ''}`
       )
-      if (!map.has(stableKey)) map.set(stableKey, review)
+      if (!map.has(stableKey)) {
+        map.set(stableKey, {
+          ...review,
+          __fromPublicServiceHub: true,
+        })
+      }
     })
   })
 
@@ -78,6 +83,7 @@ function normalizePublicServiceReview(review) {
     comment: review.comment || review.content || review.reviewText || review.text || '',
     rating: Number(review.rating || review.score || review.stars || 0),
     createdAt: review.createdAt || review.created_at || new Date().toISOString(),
+    __fromPublicServiceHub: Boolean(review.__fromPublicServiceHub),
   }
 }
 
@@ -89,16 +95,23 @@ function normalizeText(value) {
     .trim()
 }
 
+function splitAssignedValues(value) {
+  return String(value || '')
+    .split(/[|,;]+/)
+    .map(normalizeText)
+    .filter(Boolean)
+}
+
 function reviewMatchesAssignedPartner(review, currentUser) {
-  const assignedCode = normalizeText(currentUser?.assignedOperatorCode)
-  const assignedName = normalizeText(
+  const assignedCodes = splitAssignedValues(currentUser?.assignedOperatorCode)
+  const assignedNames = splitAssignedValues(
     currentUser?.assignedOperatorName ||
     currentUser?.orgName ||
     currentUser?.businessName ||
     currentUser?.name
   )
 
-  if (!assignedCode && !assignedName) return true
+  if (!assignedCodes.length && !assignedNames.length) return true
 
   const codes = [
     review.targetCode,
@@ -122,12 +135,13 @@ function reviewMatchesAssignedPartner(review, currentUser) {
     review.name,
   ].map(normalizeText).filter(Boolean)
 
-  const codeMatches = Boolean(assignedCode && codes.some((code) => code === assignedCode))
-  const nameMatches = Boolean(assignedName && names.some((name) => name === assignedName))
+  const codeMatches = assignedCodes.length > 0 && codes.some((code) => assignedCodes.includes(code))
+  const nameMatches = assignedNames.length > 0 && names.some((name) => assignedNames.includes(name))
 
-  if (assignedCode && assignedName && codes.length && names.length) return codeMatches && nameMatches
-  if (assignedCode && codes.length) return codeMatches
-  if (assignedName && names.length) return nameMatches
+  // Khi tài khoản mua gói tự chọn nhiều dịch vụ, assignedOperatorCode có dạng:
+  // PT-001,PT-002 hoặc KS-004|PT-040. Chỉ cần review thuộc một mã đã mua là được hiển thị.
+  if (assignedCodes.length && codes.length) return codeMatches
+  if (assignedNames.length && names.length) return nameMatches
 
   return false
 }
@@ -190,6 +204,23 @@ async function persistVisibilityRemote(reviewId, visibility) {
 }
 
 const PAGE_SIZE = 10
+const PARTNER_REVIEW_AI_CONTEXT_KEY = 'reviewhub-partner-review-ai-context'
+
+function getPartnerAIUserKey(currentUser) {
+  return [
+    currentUser?.id,
+    currentUser?.email,
+    currentUser?.assignedOperatorCode,
+    currentUser?.currentPlanId,
+  ]
+    .filter(Boolean)
+    .map((item) => String(item).trim())
+    .join('|') || 'anonymous'
+}
+
+function getPartnerReviewAIContextKey(currentUser) {
+  return `${PARTNER_REVIEW_AI_CONTEXT_KEY}:${getPartnerAIUserKey(currentUser)}`
+}
 
 function getAverageRating(items) {
   if (!items.length) return 0
@@ -210,32 +241,100 @@ function getTone(status) {
   return 'danger'
 }
 
+function getReviewModerationStatus(review) {
+  return String(
+    review?.moderationStatus ||
+    review?.reviewStatus ||
+    review?.review_status ||
+    review?.status ||
+    ''
+  ).trim().toLowerCase()
+}
+
+function isRejectedForPartnerView(review) {
+  const status = getReviewModerationStatus(review)
+  return status === 'rejected' || status === 'reject' || status === 'declined' || status === 'refused'
+}
+
+function isPublicServiceHubReview(review) {
+  if (review?.__fromPublicServiceHub) return true
+
+  const source = normalizeSource(review?.sourceSystem || review?.source)
+  return [
+    'service-public',
+    'public-service',
+    'public-review',
+    'public-web',
+    'user-web',
+    'community-web',
+    'customer-web',
+    'homepage',
+    'home-page',
+    'service-operator',
+  ].includes(source)
+}
+
+function isApprovedForPartnerView(review) {
+  if (isRejectedForPartnerView(review)) return false
+
+  // Review khách gửi từ trang chủ phải qua SLA.
+  // Pending sẽ nằm ở SLA, chưa cộng vào các chỉ số PartnerReviewQueryPage.
+  if (isPublicServiceHubReview(review)) {
+    return getReviewModerationStatus(review) === 'approved'
+  }
+
+  // Review cũ/API khác vẫn giữ hiển thị như trước.
+  return true
+}
+
 function normalizeSource(value) {
   const source = String(value || '').trim().toLowerCase()
   if (source === 'partner' || source === 'partner_web' || source === 'partner-web') return 'partner-web'
+  if (source === 'public' || source === 'public_web' || source === 'public-web' || source === 'user-web' || source === 'community-web' || source === 'customer-web') return 'public-web'
   if (source === 'google' || source === 'google_maps' || source === 'google-maps') return 'google-maps'
-  if (source === 'vexere') return 'vexere'
+  if (source === 'vexere') return 'public-web'
   return source || 'unknown'
 }
 
 function getSourceLabel(value) {
   const source = normalizeSource(value)
   if (source === 'partner-web') return 'Partner'
+  if (source === 'public-web') return 'Người dùng'
   if (source === 'google-maps') return 'Google'
-  if (source === 'vexere') return 'Vexere'
+  if (source === 'vexere') return 'Người dùng'
   return 'Không rõ'
 }
 
 function getSourceIcon(value) {
   const source = normalizeSource(value)
   if (source === 'partner-web') return 'Partner'
+  if (source === 'public-web') return 'Người dùng'
   if (source === 'google-maps') return 'Google'
-  if (source === 'vexere') return 'Vexere'
+  if (source === 'vexere') return 'Người dùng'
   return 'Nguồn'
 }
 
 function clampPage(page, totalPages) {
   return Math.max(1, Math.min(page, totalPages))
+}
+
+function getPaginationItems(currentPage, totalPages) {
+  const total = Number(totalPages) || 1
+  const current = clampPage(Number(currentPage) || 1, total)
+
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, index) => index + 1)
+  }
+
+  if (current <= 4) {
+    return [1, 2, 3, 4, 5, 'end-ellipsis', total]
+  }
+
+  if (current >= total - 3) {
+    return [1, 'start-ellipsis', total - 4, total - 3, total - 2, total - 1, total]
+  }
+
+  return [1, 'start-ellipsis', current - 1, current, current + 1, 'end-ellipsis', total]
 }
 
 function makeStars(value) {
@@ -549,24 +648,78 @@ function getReviewImageIndex(review) {
   return ''
 }
 
+function getReviewImageToken(review) {
+  const explicitFileName =
+    review?.imageFileName ||
+    review?.image_file_name ||
+    review?.reviewImageFileName ||
+    review?.review_image_file_name ||
+    review?.photoFileName ||
+    review?.photo_file_name
+
+  if (explicitFileName) {
+    const cleanFileName = String(explicitFileName).trim()
+    return cleanFileName.replace(/\.[^.]+$/, '')
+  }
+
+  const idCandidates = [review?.id, review?.reviewId, review?.review_id]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean)
+
+  for (const id of idCandidates) {
+    // Review mới có id dạng KS-003-E1930390 thì ảnh lưu là E1930390.webp.
+    // Không đưa phần KS-003 vào tên file ảnh.
+    const matched = id.match(/^(PT|KS|MB|TH|TO|DV)-\d{3}-(.+)$/i)
+    if (matched?.[2]) {
+      return matched[2].replace(/\.[^.]+$/, '')
+    }
+  }
+
+  return ''
+}
+
 function getReviewImageInfo(review) {
-  const directImage = review?.reviewImage || review?.reviewImageUrl || review?.imageUrl || review?.photoUrl || review?.image_url || review?.photo_url
+  const directImage =
+    review?.reviewImage ||
+    review?.reviewImageUrl ||
+    review?.imageUrl ||
+    review?.photoUrl ||
+    review?.publicPath ||
+    review?.imagePath ||
+    review?.review_image ||
+    review?.review_image_url ||
+    review?.image_url ||
+    review?.photo_url ||
+    review?.public_path ||
+    review?.image_path
 
   if (directImage) {
     return {
       url: directImage,
       index: getReviewImageIndex(review),
+      token: getReviewImageToken(review),
       operatorCode: getReviewImageOperatorCode(review),
       categorySlug: getReviewImageCategorySlug(review),
     }
   }
 
   const operatorCode = getReviewImageOperatorCode(review)
+  const categorySlug = getReviewImageCategorySlug(review)
+  const imageToken = getReviewImageToken(review)
+
+  if (operatorCode && imageToken) {
+    return {
+      url: `/anhdanggia/${categorySlug}/${operatorCode}/${imageToken}.webp`,
+      index: getReviewImageIndex(review),
+      token: imageToken,
+      operatorCode,
+      categorySlug,
+    }
+  }
+
   const index = getReviewImageIndex(review)
 
   if (!operatorCode || !index) return null
-
-  const categorySlug = getReviewImageCategorySlug(review)
 
   return {
     url: `/anhdanggia/${categorySlug}/${operatorCode}/${index}.webp`,
@@ -757,6 +910,23 @@ export default function PartnerReviewQueryPage() {
   const [aiError, setAiError] = useState('')
   const [hiddenReviewImages, setHiddenReviewImages] = useState({})
   const [activeReviewImageIndex, setActiveReviewImageIndex] = useState(0)
+  const [slaRefreshTick, setSlaRefreshTick] = useState(0)
+
+  useEffect(() => {
+    const refreshAfterSlaModeration = () => {
+      setSlaRefreshTick((value) => value + 1)
+    }
+
+    window.addEventListener('storage', refreshAfterSlaModeration)
+    window.addEventListener('reviewhub:sla-review-moderated', refreshAfterSlaModeration)
+    window.addEventListener('reviewhub:public-review-created', refreshAfterSlaModeration)
+
+    return () => {
+      window.removeEventListener('storage', refreshAfterSlaModeration)
+      window.removeEventListener('reviewhub:sla-review-moderated', refreshAfterSlaModeration)
+      window.removeEventListener('reviewhub:public-review-created', refreshAfterSlaModeration)
+    }
+  }, [])
 
   useEffect(() => {
     setLoading(true)
@@ -765,7 +935,7 @@ export default function PartnerReviewQueryPage() {
       category: filters.category,
       visibility: filters.visibility,
       sourceSystem: 'all',
-      size: 300,
+      size: 1000,
     })
       .then((data) => {
         const apiList = Array.isArray(data)
@@ -796,14 +966,19 @@ export default function PartnerReviewQueryPage() {
         const publicServiceReviews = readPublicServiceReviews().map(normalizePublicServiceReview)
         const merged = mergeUniqueReviews([...publicServiceReviews, ...apiReviews])
           .filter((review) => reviewMatchesAssignedPartner(review, currentUser))
+          .filter(isApprovedForPartnerView)
         setAllowedReviews(merged)
       })
       .catch(() => {
         const publicServiceReviews = readPublicServiceReviews().map(normalizePublicServiceReview)
-        setAllowedReviews(mergeUniqueReviews(publicServiceReviews).filter((review) => reviewMatchesAssignedPartner(review, currentUser)))
+        setAllowedReviews(
+          mergeUniqueReviews(publicServiceReviews)
+            .filter((review) => reviewMatchesAssignedPartner(review, currentUser))
+            .filter(isApprovedForPartnerView)
+        )
       })
       .finally(() => setLoading(false))
-  }, [filters.keyword, filters.category, filters.visibility, currentUser])
+  }, [filters.keyword, filters.category, filters.visibility, currentUser, slaRefreshTick])
 
   const filtered = useMemo(() => {
     const keyword = filters.keyword.toLowerCase().trim()
@@ -830,9 +1005,61 @@ export default function PartnerReviewQueryPage() {
       const matchesVisibility = filters.visibility === 'all' || item.visibility === filters.visibility
       const matchesSource = filters.sourceSystem === 'all' || normalizeSource(item.sourceSystem) === filters.sourceSystem
 
-      return matchesKeyword && matchesCategory && matchesVisibility && matchesSource
+      return isApprovedForPartnerView(item) && matchesKeyword && matchesCategory && matchesVisibility && matchesSource
     })
   }, [allowedReviews, filters])
+
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const payload = {
+      version: 4,
+      userKey: getPartnerAIUserKey(currentUser),
+      updatedAt: Date.now(),
+      filters: {
+        keyword: filters.keyword,
+        category: filters.category,
+        visibility: filters.visibility,
+        sourceSystem: filters.sourceSystem,
+      },
+      currentUser: {
+        id: currentUser?.id || '',
+        email: currentUser?.email || '',
+        currentPlanId: currentUser?.currentPlanId || '',
+        membershipLabel: currentUser?.membershipLabel || '',
+        assignedOperatorCode: currentUser?.assignedOperatorCode || '',
+        assignedOperatorName: currentUser?.assignedOperatorName || '',
+        orgName: currentUser?.orgName || '',
+      },
+      totalReviews: filtered.length,
+      reviews: filtered
+        .slice(0, 1000)
+        .map(makePartnerAIReviewPayload),
+      aiReport: aiReport || '',
+    }
+
+    window.__reviewhubPartnerReviewAIContext = payload
+
+    try {
+      window.localStorage.setItem(getPartnerReviewAIContextKey(currentUser), JSON.stringify(payload))
+      window.localStorage.removeItem(PARTNER_REVIEW_AI_CONTEXT_KEY)
+    } catch {}
+  }, [
+    filtered,
+    filters.keyword,
+    filters.category,
+    filters.visibility,
+    filters.sourceSystem,
+    aiReport,
+    currentUser?.id,
+    currentUser?.email,
+    currentUser?.currentPlanId,
+    currentUser?.membershipLabel,
+    currentUser?.assignedOperatorCode,
+    currentUser?.assignedOperatorName,
+    currentUser?.orgName,
+  ])
 
   useEffect(() => {
     setAiReport('')
@@ -840,15 +1067,18 @@ export default function PartnerReviewQueryPage() {
   }, [filters.keyword, filters.category, filters.visibility, filters.sourceSystem])
 
   const stats = useMemo(() => {
-    const publicShared = allowedReviews.filter((item) => item.visibility === 'public').length
-    const privateMine = allowedReviews.filter((item) => item.visibility === 'private').length
-    const good = filtered.filter((item) => Number(item.rating) >= 4).length
-    const bad = filtered.filter((item) => Number(item.rating) <= 2).length
-    const average = getAverageRating(filtered)
+    const partnerVisibleReviews = allowedReviews.filter(isApprovedForPartnerView)
+    const filteredPartnerVisible = filtered.filter(isApprovedForPartnerView)
+
+    const publicShared = partnerVisibleReviews.filter((item) => item.visibility === 'public').length
+    const privateMine = partnerVisibleReviews.filter((item) => item.visibility === 'private').length
+    const good = filteredPartnerVisible.filter((item) => Number(item.rating) >= 4).length
+    const bad = filteredPartnerVisible.filter((item) => Number(item.rating) <= 2).length
+    const average = getAverageRating(filteredPartnerVisible)
 
     return {
-      totalAllowed: allowedReviews.length,
-      visibleNow: filtered.length,
+      totalAllowed: partnerVisibleReviews.length,
+      visibleNow: filteredPartnerVisible.length,
       publicShared,
       privateMine,
       good,
@@ -887,6 +1117,10 @@ export default function PartnerReviewQueryPage() {
   const safeCurrentPage = clampPage(currentPage, totalPages)
   const startIndex = filtered.length === 0 ? 0 : (safeCurrentPage - 1) * PAGE_SIZE + 1
   const endIndex = filtered.length === 0 ? 0 : Math.min(safeCurrentPage * PAGE_SIZE, filtered.length)
+  const paginationItems = useMemo(
+    () => getPaginationItems(safeCurrentPage, totalPages),
+    [safeCurrentPage, totalPages]
+  )
 
   const currentItems = useMemo(() => {
     const start = (safeCurrentPage - 1) * PAGE_SIZE
@@ -950,7 +1184,7 @@ export default function PartnerReviewQueryPage() {
 
     try {
       const payloadReviews = filtered
-        .slice(0, 300)
+        .slice(0, 1000)
         .map(makePartnerAIReviewPayload)
 
       const res = await api.post(
@@ -1126,9 +1360,9 @@ const handleExportExcel = () => {
   }
 
   const kpis = [
-    { label: 'Review được phép xem', value: stats.totalAllowed, hint: '+12.5% so với tuần trước', icon: 'reviews', tone: 'violet' },
-    { label: 'Đang hiển thị', value: stats.visibleNow, hint: '+8.2% sau bộ lọc', icon: 'visible', tone: 'green' },
-    { label: 'Public dùng chung', value: stats.publicShared, hint: '+15.1% trong hub', icon: 'public', tone: 'blue' },
+    { label: 'Review được phép xem', value: stats.totalAllowed, hint: 'Tăng khi SLA phê duyệt review mới', icon: 'reviews', tone: 'violet' },
+    { label: 'Đang hiển thị', value: stats.visibleNow, hint: 'Tính theo bộ lọc hiện tại', icon: 'visible', tone: 'green' },
+    { label: 'Public dùng chung', value: stats.publicShared, hint: 'Chỉ tính review public đã duyệt', icon: 'public', tone: 'blue' },
     { label: 'Private của tôi', value: stats.privateMine, hint: stats.privateMine ? 'Dữ liệu riêng đối tác' : 'Không có dữ liệu', icon: 'private', tone: 'orange' },
     { label: 'Cần theo dõi', value: stats.bad, hint: '-4.3% cần xử lý', icon: 'alert', tone: 'red' },
   ]
@@ -1188,7 +1422,7 @@ const handleExportExcel = () => {
                 <span>Nguồn</span>
                 <select value={filters.sourceSystem} onChange={(event) => handleChangeFilter('sourceSystem', event.target.value)}>
                   <option value="all">Tất cả nguồn</option>
-                  <option value="vexere">Vexere</option>
+                  <option value="public-web">Người dùng</option>
                   <option value="partner-web">Partner gửi</option>
                   <option value="google-maps">Google Maps</option>
                 </select>
@@ -1304,17 +1538,45 @@ const handleExportExcel = () => {
             </div>
 
             <div className={styles.tableFooter}>
-              <span>Hiển thị {startIndex}–{endIndex} / trang {safeCurrentPage}</span>
+              <span className={styles.paginationSummary}>
+                Hiển thị {startIndex}–{endIndex} / {filtered.length} review
+              </span>
 
               {totalPages > 1 && (
-                <div className={styles.paginationWrap}>
-                  <button type="button" disabled={safeCurrentPage === 1} onClick={() => setCurrentPage((prev) => clampPage(prev - 1, totalPages))}>Trước</button>
-                  {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
-                    <button key={page} type="button" className={safeCurrentPage === page ? styles.pageActive : ''} onClick={() => setCurrentPage(page)}>
-                      {page}
-                    </button>
+                <div className={styles.paginationWrap} aria-label="Phân trang review">
+                  <button
+                    type="button"
+                    aria-label="Trang trước"
+                    disabled={safeCurrentPage === 1}
+                    onClick={() => setCurrentPage((prev) => clampPage(prev - 1, totalPages))}
+                  >
+                    ‹
+                  </button>
+
+                  {paginationItems.map((item) => (
+                    typeof item === 'number' ? (
+                      <button
+                        key={item}
+                        type="button"
+                        className={safeCurrentPage === item ? styles.pageActive : ''}
+                        aria-current={safeCurrentPage === item ? 'page' : undefined}
+                        onClick={() => setCurrentPage(item)}
+                      >
+                        {item}
+                      </button>
+                    ) : (
+                      <span key={item} className={styles.paginationEllipsis}>…</span>
+                    )
                   ))}
-                  <button type="button" disabled={safeCurrentPage === totalPages} onClick={() => setCurrentPage((prev) => clampPage(prev + 1, totalPages))}>Sau</button>
+
+                  <button
+                    type="button"
+                    aria-label="Trang sau"
+                    disabled={safeCurrentPage === totalPages}
+                    onClick={() => setCurrentPage((prev) => clampPage(prev + 1, totalPages))}
+                  >
+                    ›
+                  </button>
                 </div>
               )}
             </div>
@@ -1340,7 +1602,7 @@ const handleExportExcel = () => {
               </div>
               <select value={filters.sourceSystem} onChange={(event) => handleChangeFilter('sourceSystem', event.target.value)}>
                 <option value="all">Tất cả nguồn</option>
-                <option value="vexere">Vexere</option>
+                <option value="public-web">Người dùng</option>
                 <option value="partner-web">Partner gửi</option>
                 <option value="google-maps">Google Maps</option>
               </select>

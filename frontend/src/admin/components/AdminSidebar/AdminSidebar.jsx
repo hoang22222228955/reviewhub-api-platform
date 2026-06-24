@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import styles from './AdminSidebar.module.css';
 
@@ -87,18 +88,184 @@ function Icon({ name }) {
   }
 }
 
-export default function AdminSidebar() {
+function ToggleIcon({ collapsed }) {
+  if (collapsed) {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect x="5" y="5" width="14" height="14" rx="3.5" />
+        <path d="M10 8v8" />
+        <path d="M13.5 9.2h2" />
+        <path d="M13.5 12h2" />
+        <path d="M13.5 14.8h2" />
+      </svg>
+    );
+  }
+
   return (
-    <aside className={styles.sidebar}>
-      <div className={styles.brand}>
-        <div className={styles.logo}>AD</div>
-        <div>
-          <div className={styles.title}>Admin control</div>
-          <p className={styles.text}>Khu vực chỉnh giá gói, quản lý đối tác và kiểm duyệt dữ liệu.</p>
+    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path d="M6.5 8h11" />
+      <path d="M6.5 12h11" />
+      <path d="M6.5 16h11" />
+    </svg>
+  );
+}
+
+function appendGridTransition(currentTransition) {
+  const gridTransition = 'grid-template-columns 240ms ease';
+
+  if (!currentTransition) return gridTransition;
+  if (currentTransition.includes('grid-template-columns')) return currentTransition;
+
+  return `${currentTransition}, ${gridTransition}`;
+}
+
+
+export default function AdminSidebar() {
+  const sidebarRef = useRef(null);
+  const layoutMetaRef = useRef(null);
+
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem('adminSidebarCollapsed') === '1';
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('adminSidebarCollapsed', collapsed ? '1' : '0');
+    } catch {
+      // Bỏ qua nếu trình duyệt chặn localStorage.
+    }
+  }, [collapsed]);
+
+  useEffect(() => {
+    const sidebarEl = sidebarRef.current;
+    const layoutEl = sidebarEl?.parentElement;
+
+    if (!layoutEl) return undefined;
+
+    layoutMetaRef.current = {
+      layoutEl,
+      originalGridTemplateColumns: layoutEl.style.gridTemplateColumns,
+      originalTransition: layoutEl.style.transition,
+    };
+
+    return () => {
+      const meta = layoutMetaRef.current;
+      if (!meta?.layoutEl) return;
+
+      if (meta.originalGridTemplateColumns) {
+        meta.layoutEl.style.gridTemplateColumns = meta.originalGridTemplateColumns;
+      } else {
+        meta.layoutEl.style.removeProperty('grid-template-columns');
+      }
+
+      if (meta.originalTransition) {
+        meta.layoutEl.style.transition = meta.originalTransition;
+      } else {
+        meta.layoutEl.style.removeProperty('transition');
+      }
+
+      meta.layoutEl.style.removeProperty('--admin-sidebar-track-width');
+      meta.layoutEl.style.removeProperty('--admin-sidebar-free-space');
+      delete meta.layoutEl.dataset.adminSidebarCollapsed;
+      document.documentElement.removeAttribute('data-admin-sidebar');
+    };
+  }, []);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const openWidth = '286px';
+    const collapsedWidth = '78px';
+    const width = collapsed ? collapsedWidth : openWidth;
+    const freeSpace = collapsed ? '208px' : '0px';
+
+    function syncLayoutWidth() {
+      const sidebarEl = sidebarRef.current;
+      const layoutEl = sidebarEl?.parentElement;
+
+      root.setAttribute('data-admin-sidebar', collapsed ? 'collapsed' : 'expanded');
+      root.style.setProperty('--admin-sidebar-track-width', width);
+      root.style.setProperty('--admin-sidebar-free-space', freeSpace);
+
+      if (!layoutEl) return;
+
+      if (!layoutMetaRef.current || layoutMetaRef.current.layoutEl !== layoutEl) {
+        layoutMetaRef.current = {
+          layoutEl,
+          originalGridTemplateColumns: layoutEl.style.gridTemplateColumns,
+          originalTransition: layoutEl.style.transition,
+        };
+      }
+
+      layoutEl.dataset.adminSidebarCollapsed = collapsed ? 'true' : 'false';
+      layoutEl.style.setProperty('--admin-sidebar-track-width', width);
+      layoutEl.style.setProperty('--admin-sidebar-free-space', freeSpace);
+
+      const isDesktop = window.matchMedia('(min-width: 1081px)').matches;
+      const computedDisplay = window.getComputedStyle(layoutEl).display;
+      const isGridLayout = computedDisplay.includes('grid');
+      const meta = layoutMetaRef.current;
+
+      if (!isDesktop || !isGridLayout) {
+        if (meta.originalGridTemplateColumns) {
+          layoutEl.style.gridTemplateColumns = meta.originalGridTemplateColumns;
+        } else {
+          layoutEl.style.removeProperty('grid-template-columns');
+        }
+
+        if (meta.originalTransition) {
+          layoutEl.style.transition = meta.originalTransition;
+        } else {
+          layoutEl.style.removeProperty('transition');
+        }
+
+        return;
+      }
+
+      layoutEl.style.gridTemplateColumns = `${width} minmax(0, 1fr)`;
+      layoutEl.style.transition = appendGridTransition(meta.originalTransition);
+    }
+
+    syncLayoutWidth();
+    window.addEventListener('resize', syncLayoutWidth);
+    window.dispatchEvent(new CustomEvent('admin-sidebar-change', { detail: { collapsed } }));
+
+    return () => {
+      window.removeEventListener('resize', syncLayoutWidth);
+    };
+  }, [collapsed]);
+
+  const toggleLabel = collapsed ? 'Mở thanh bên' : 'Đóng sidebar';
+
+  return (
+    <aside ref={sidebarRef} className={`${styles.sidebar} ${collapsed ? styles.collapsed : ''}`}>
+      <div className={styles.sidebarTop}>
+        <div className={styles.brand}>
+          <div className={styles.logo}>AD</div>
+          <div className={styles.brandContent}>
+            <div className={styles.title}>Admin control</div>
+            <p className={styles.text}>Khu vực chỉnh giá gói, quản lý đối tác và kiểm duyệt dữ liệu.</p>
+          </div>
         </div>
+
+        <div className={styles.miniLogo}>AD</div>
+
+        <button
+          type="button"
+          className={styles.toggleBtn}
+          onClick={() => setCollapsed((value) => !value)}
+          aria-label={toggleLabel}
+          title={toggleLabel}
+        >
+          <ToggleIcon collapsed={collapsed} />
+          <span className={styles.toggleTooltip}>{toggleLabel}</span>
+        </button>
       </div>
 
-      <nav className={styles.nav}>
+      <nav className={styles.nav} aria-label="Admin menu">
         {items.map((item) => (
           <NavLink
             key={item.to}
@@ -109,7 +276,8 @@ export default function AdminSidebar() {
             <span className={styles.iconWrap}>
               <Icon name={item.icon} />
             </span>
-            <span>{item.label}</span>
+            <span className={styles.label}>{item.label}</span>
+            <span className={styles.linkTooltip}>{item.label}</span>
           </NavLink>
         ))}
       </nav>
