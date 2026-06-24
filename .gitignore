@@ -32,3 +32,9 @@ Thumbs.db
 
 # Env secrets (giữ .env.example nếu có)
 scripts/.env
+
+# Ignore crawler chrome cache
+scripts/chrome_profile_gmaps_native/
+**/Cache/
+**/Cache_Data/
+.env
